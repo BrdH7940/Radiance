@@ -45,9 +45,9 @@ resource "aws_dynamodb_table" "terraform_locks" {
 
 # Bảng chứa dữ liệu User
 resource "aws_dynamodb_table" "user_data" {
-  name           = "UserProfiles"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "UserId"
+  name         = "UserProfiles"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "UserId"
 
   attribute {
     name = "UserId"
@@ -81,8 +81,8 @@ resource "aws_iam_role" "lambda_exec_role" {
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
       Principal = { Service = "lambda.amazonaws.com" }
     }]
   })
@@ -124,7 +124,7 @@ resource "aws_iam_role_policy" "lambda_policy" {
 data "archive_file" "dummy_backend" {
   type        = "zip"
   output_path = "${path.module}/dummy_backend.zip"
-  
+
   source {
     content  = "def lambda_handler(event, context): return {'statusCode': 200, 'body': 'Hello from Terraform'}"
     filename = "lambda_function.py"
@@ -202,7 +202,7 @@ resource "aws_s3_bucket_public_access_block" "frontend_public" {
 
 # Policy cho phép ai cũng đọc được file (để hiển thị web)
 resource "aws_s3_bucket_policy" "frontend_policy" {
-  bucket = aws_s3_bucket.frontend_bucket.id
+  bucket     = aws_s3_bucket.frontend_bucket.id
   depends_on = [aws_s3_bucket_public_access_block.frontend_public]
 
   policy = jsonencode({

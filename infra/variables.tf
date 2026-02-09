@@ -11,7 +11,7 @@ variable "project_name" {
 }
 
 variable "langchain_api_key" {
-  type        = string
-  sensitive   = true
-  default     = null
+  type      = string
+  sensitive = true
+  default   = null
 }
