@@ -1,0 +1,59 @@
+name: Frontend — build & deploy
+
+on:
+    push:
+        branches: [main]
+        paths:
+            - 'apps/web/**'
+    workflow_dispatch: {}
+
+jobs:
+    build-and-deploy:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - name: Use Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: '18'
+            - name: Install & Build # if package.json exists
+              working-directory: apps/web
+              run: |
+                  if [ -f package.json ]; then
+                    npm ci
+                    npm run build --if-present
+                  else
+                    echo "No package.json found in apps/web — ensure your frontend lives there." && exit 1
+                  fi
+            - name: Configure AWS credentials
+              uses: aws-actions/configure-aws-credentials@v2
+              with:
+                  aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+                  aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+                  aws-region: ${{ secrets.AWS_REGION }}
+            - name: Resolve S3 bucket name # Find the exact bucket from terraform output
+              working-directory: infra
+              run: |
+                  terraform init -input=false
+                  if terraform output -json | jq -e '.s3_frontend_bucket_name' > /dev/null 2>&1; then
+                    terraform output -raw s3_frontend_bucket_name > /tmp/frontend_bucket
+                  else
+                    echo "terraform output does not contain s3_frontend_bucket_name. Set FRONTEND_BUCKET secret or add output in infra." && exit 1
+                  fi
+            - name: Deploy to S3 # sync build output to S3
+              run: |
+                  BUILD_DIR="apps/web/dist"
+                  # common alternatives
+                  if [ -d apps/web/dist ]; then BUILD_DIR="apps/web/dist"; fi
+                  if [ -d apps/web/build ]; then BUILD_DIR="apps/web/build"; fi
+                  if [ -d apps/web/out ]; then BUILD_DIR="apps/web/out"; fi
+                  if [ ! -d "$BUILD_DIR" ]; then echo "Build output not found (looked for dist|build|out). Set correct build output or adjust workflow." && exit 1; fi
+
+                  BUCKET=$(cat /tmp/frontend_bucket)
+                  aws s3 sync "$BUILD_DIR" "s3://$BUCKET" --delete --acl public-read
+            - name: Invalidate CloudFront # optional cache purge
+              if: env.CLOUDFRONT_DISTRIBUTION_ID != ''
+              run: |
+                  aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --paths "/*"
+              env:
+                  CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}

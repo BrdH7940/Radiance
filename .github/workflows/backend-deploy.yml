@@ -1,0 +1,52 @@
+name: Backend — package & deploy (fast path)
+
+on:
+    push:
+        paths:
+            - 'services/**'
+    workflow_dispatch: {} # manual trigger
+    # Fast path: aws lambda update-function-code
+
+jobs:
+    package-and-deploy:
+        runs-on: ubuntu-latest
+        defaults:
+            run:
+                shell: bash
+        steps:
+            - uses: actions/checkout@v4
+            - name: Find changed services # Find the exactly changed services
+              id: changed
+              run: |
+                  git fetch --prune --unshallow 2>/dev/null || true
+                  SERVICES=$(git --no-pager diff --name-only ${{ github.sha }} ${{ github.sha }}~1 -- services/ | awk -F/ '{print $2}' | sort -u)
+                  echo "services=$SERVICES" >> $GITHUB_OUTPUT
+            - name: Package service # Compress code to .zip
+              if: steps.changed.outputs.services != ''
+              run: |
+                  SERVICE=${{ steps.changed.outputs.services }}
+                  echo "Packaging: $SERVICE"
+                  bash ./scripts/package_lambda.sh services/$SERVICE ./.artifacts/$SERVICE.zip
+                  ls -lh ./.artifacts
+            - name: Configure AWS credentials
+              uses: aws-actions/configure-aws-credentials@v2
+              with:
+                  aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+                  aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+                  aws-region: ${{ secrets.AWS_REGION }}
+            - name: Update Lambda # Push .zip to lambda, if alias not exists, use default name
+              if: steps.changed.outputs.services != ''
+              run: |
+                  SERVICE=${{ steps.changed.outputs.services }}
+                  ZIP=./.artifacts/$SERVICE.zip
+                  # default function name (override with SERVICE_LAMBDA_NAME secret or repository variable)
+                  FN_NAME=${{ secrets.SERVICE_LAMBDA_NAME }}
+                  if [ -z "$FN_NAME" ]; then FN_NAME="radiance-backend-api"; fi
+                  aws lambda update-function-code --function-name "$FN_NAME" --zip-file fileb://$ZIP
+
+            - name: Post-deploy smoke test # Healthcheck
+              run: |
+                  echo "Run a simple healthcheck against the Function URL if available"
+                  # Example: curl -fsS "$${{ secrets.BACKEND_HEALTHCHECK_URL }}" || (echo 'healthcheck failed' && exit 1)
+              env:
+                  BACKEND_HEALTHCHECK_URL: ${{ secrets.BACKEND_HEALTHCHECK_URL }}

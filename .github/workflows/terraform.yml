@@ -1,0 +1,80 @@
+name: Terraform — CI
+
+on:
+    pull_request:
+        paths:
+            - 'infra/**'
+    push:
+        branches: [main]
+        paths:
+            - 'infra/**'
+    workflow_dispatch: {}
+
+env:
+    TF_IN_AUTOMATION: '1'
+
+jobs:
+    fmt-validate-plan:
+        name: Format / Validate / Plan (PRs)
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@v4
+            - name: Setup Terraform
+              uses: hashicorp/setup-terraform@v2
+              with:
+                  terraform_version: 1.5.0
+            - name: Cache .terraform
+              uses: actions/cache@v4
+              with:
+                  path: infra/.terraform
+                  key: ${{ runner.os }}-tf-${{ hashFiles('infra/**.tf*') }}
+            - name: Terraform fmt
+              working-directory: infra
+              run: terraform fmt -check
+            - name: Terraform init
+              working-directory: infra
+              run: terraform init -input=false
+            - name: Terraform validate
+              working-directory: infra
+              run: terraform validate
+            - name: Terraform plan
+              working-directory: infra
+              run: terraform plan -out=tfplan -input=false
+            - name: Upload plan artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: tfplan
+                  path: infra/tfplan
+
+    apply-prod:
+        name: Apply (manual / protected)
+        runs-on: ubuntu-latest
+        needs: fmt-validate-plan
+        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+        environment: production
+        permissions:
+            contents: read
+            actions: write
+        steps:
+            - uses: actions/checkout@v4
+            - name: Setup Terraform
+              uses: hashicorp/setup-terraform@v2
+              with:
+                  terraform_version: 1.5.0
+            - name: Download plan
+              uses: actions/download-artifact@v4
+              with:
+                  name: tfplan
+                  path: infra
+            - name: Terraform init
+              working-directory: infra
+              run: terraform init -input=false
+            - name: Terraform apply (uses plan)
+              working-directory: infra
+              env:
+                  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+                  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+                  AWS_REGION: ${{ secrets.AWS_REGION }}
+              run: terraform apply -input=false -auto-approve infra/tfplan
