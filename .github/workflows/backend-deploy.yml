@@ -36,13 +36,23 @@ jobs:
                   aws-region: ${{ secrets.AWS_REGION }}
             - name: Update Lambda # Push .zip to lambda, if alias not exists, use default name
               if: steps.changed.outputs.services != ''
+              env:
+                  LANGCHAIN_API_KEY: ${{ secrets.LANGCHAIN_API_KEY }}
+                  SERVICE_LAMBDA_NAME: ${{ secrets.SERVICE_LAMBDA_NAME }}
               run: |
                   SERVICE=${{ steps.changed.outputs.services }}
                   ZIP=./.artifacts/$SERVICE.zip
                   # default function name (override with SERVICE_LAMBDA_NAME secret or repository variable)
-                  FN_NAME=${{ secrets.SERVICE_LAMBDA_NAME }}
+                  FN_NAME="$SERVICE_LAMBDA_NAME"
                   if [ -z "$FN_NAME" ]; then FN_NAME="radiance-backend-api"; fi
+
+                  # update code
                   aws lambda update-function-code --function-name "$FN_NAME" --zip-file fileb://$ZIP
+
+                  # optionally inject LANGCHAIN_API_KEY (do NOT print secret)
+                  if [ -n "$LANGCHAIN_API_KEY" ]; then
+                    aws lambda update-function-configuration --function-name "$FN_NAME" --environment "Variables={LANGCHAIN_API_KEY=$LANGCHAIN_API_KEY}"
+                  fi
 
             - name: Post-deploy smoke test # Healthcheck
               run: |

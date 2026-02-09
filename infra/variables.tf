@@ -9,3 +9,9 @@ variable "project_name" {
   type        = string
   default     = "RadianceAI"
 }
+
+variable "langchain_api_key" {
+  type        = string
+  sensitive   = true
+  default     = null
+}

@@ -149,7 +149,6 @@ resource "aws_lambda_function" "backend_api" {
 }
 
 # Tạo Function URL (Để Frontend gọi được Lambda mà chưa cần API Gateway phức tạp)
-# Đây là cách rẻ nhất và nhanh nhất để public API.
 resource "aws_lambda_function_url" "backend_url" {
   function_name      = aws_lambda_function.backend_api.function_name
   authorization_type = "NONE" # Public access cho Sprint 0, sau này sẽ auth sau
