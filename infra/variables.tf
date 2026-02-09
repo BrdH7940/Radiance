@@ -1,3 +1,11 @@
 variable "aws_region" {
-  default = "us-east-1"
+  description = "AWS region to deploy resources"
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "project_name" {
+  description = "Project name for tagging"
+  type        = string
+  default     = "RadianceAI"
 }
