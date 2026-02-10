@@ -1,0 +1,10 @@
+# ignore common files when building container
+.git
+.gitignore
+__pycache__
+*.pyc
+.venv
+.env
+node_modules
+.artifacts
+.DS_Store

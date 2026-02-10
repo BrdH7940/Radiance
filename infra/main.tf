@@ -120,46 +120,17 @@ resource "aws_iam_role_policy" "lambda_policy" {
   })
 }
 
-# Tạo file zip giả để deploy lần đầu (tránh lỗi thiếu file code)
-data "archive_file" "dummy_backend" {
-  type        = "zip"
-  output_path = "${path.module}/dummy_backend.zip"
+# ECR repository to store Lambda container images
+resource "aws_ecr_repository" "backend" {
+  name                 = var.ecr_repo_name
+  image_tag_mutability = "MUTABLE"
 
-  source {
-    content  = "def lambda_handler(event, context): return {'statusCode': 200, 'body': 'Hello from Terraform'}"
-    filename = "lambda_function.py"
+  image_scanning_configuration {
+    scan_on_push = true
   }
-}
-
-# Lambda Function chính
-resource "aws_lambda_function" "backend_api" {
-  function_name = "radiance-backend-api"
-  role          = aws_iam_role.lambda_exec_role.arn
-  handler       = "lambda_function.lambda_handler"
-  runtime       = "python3.9"
-  timeout       = 15
-  memory_size   = 128
-
-  filename         = data.archive_file.dummy_backend.output_path
-  source_code_hash = data.archive_file.dummy_backend.output_base64sha256
 
   tags = {
     Project = var.project_name
-  }
-}
-
-# Tạo Function URL (Để Frontend gọi được Lambda mà chưa cần API Gateway phức tạp)
-resource "aws_lambda_function_url" "backend_url" {
-  function_name      = aws_lambda_function.backend_api.function_name
-  authorization_type = "NONE" # Public access cho Sprint 0, sau này sẽ auth sau
-
-  cors {
-    allow_credentials = true
-    allow_origins     = ["*"]
-    allow_methods     = ["*"]
-    allow_headers     = ["date", "keep-alive"]
-    expose_headers    = ["keep-alive", "date"]
-    max_age           = 86400
   }
 }
 
@@ -219,6 +190,25 @@ resource "aws_s3_bucket_policy" "frontend_policy" {
   })
 }
 
+resource "aws_ecr_lifecycle_policy" "backend_policy" {
+  repository = aws_ecr_repository.backend.name
+
+  policy = jsonencode({
+    rules = [{
+      rulePriority = 1
+      description  = "Keep last 5 images"
+      selection = {
+        tagStatus     = "any"
+        countType     = "imageCountMoreThan"
+        countNumber   = 5
+      }
+      action = {
+        type = "expire"
+      }
+    }]
+  })
+}
+
 # =============================================================================
 # 4. OUTPUTS (Thông tin cần thiết để config CI/CD)
 # =============================================================================
@@ -242,3 +232,13 @@ output "api_endpoint_url" {
   value       = aws_lambda_function_url.backend_url.function_url
   description = "API Endpoint để Frontend gọi vào Backend"
 }
+
+output "ecr_repository_url" {
+  value       = aws_ecr_repository.backend.repository_url
+  description = "ECR repository URL for backend container images"
+}
+
+output "ecr_repository_arn" {
+  value       = aws_ecr_repository.backend.arn
+  description = "ECR repository ARN"
+} 
