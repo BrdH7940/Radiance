@@ -134,6 +134,59 @@ resource "aws_ecr_repository" "backend" {
   }
 }
 
+
+# Lambda Function chính
+resource "aws_lambda_function" "backend_api" {
+  function_name = "radiance-backend-api"
+  package_type  = "Image"
+  role          = aws_iam_role.lambda_exec_role.arn
+
+  # Image URI will be populated from the ECR repository created above.
+  image_uri = "${aws_ecr_repository.backend.repository_url}:${var.lambda_image_tag}"
+
+  # Only set sensitive environment variables when the corresponding Terraform
+  # variable is provided. In your case you keep the secrets in GitHub
+  # environment `env` — CI should inject them at deploy time (preferred).
+  environment {
+    variables = merge(
+      { DYNAMODB_TABLE = aws_dynamodb_table.user_data.name },
+      var.langchain_api_key != null ? { LANGCHAIN_API_KEY = var.langchain_api_key } : {},
+      var.gemini_api_key    != null ? { GEMINI_API_KEY    = var.gemini_api_key }    : {}
+    )
+  }
+
+  # AI workloads need more resources
+  memory_size = var.lambda_memory_size
+  timeout     = var.lambda_timeout
+
+  # If you need to override the entrypoint/handler exposed by the image,
+  # configure `image_config` here. By default the image should expose
+  # a handler named `handler` (see `services/app.py`).
+  image_config {
+    command = []
+  }
+
+  tags = {
+    Project = var.project_name
+  }
+}
+
+# Tạo Function URL (Để Frontend gọi được Lambda mà chưa cần API Gateway phức tạp)
+resource "aws_lambda_function_url" "backend_url" {
+  function_name      = aws_lambda_function.backend_api.function_name
+  authorization_type = "NONE" # Public access cho Sprint 0, sau này sẽ auth sau
+
+  cors {
+    allow_credentials = true
+    allow_origins     = ["*"]
+    allow_methods     = ["*"]
+    allow_headers     = ["date", "keep-alive"]
+    expose_headers    = ["keep-alive", "date"]
+    max_age           = 86400
+  }
+}
+
+
 # =============================================================================
 # 3. FRONTEND LAYER (S3 STATIC WEBSITE)
 # =============================================================================
@@ -223,7 +276,15 @@ output "s3_website_url" {
   description = "Link truy cập Website Frontend"
 }
 
-# ===
+output "lambda_function_name" {
+  value       = aws_lambda_function.backend_api.function_name
+  description = "Tên Lambda Function dùng để deploy Backend"
+}
+
+output "api_endpoint_url" {
+  value       = aws_lambda_function_url.backend_url.function_url
+  description = "API Endpoint để Frontend gọi vào Backend"
+}
 
 output "ecr_repository_url" {
   value       = aws_ecr_repository.backend.repository_url
