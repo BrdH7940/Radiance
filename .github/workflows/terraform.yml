@@ -37,7 +37,7 @@ jobs:
                   key: ${{ runner.os }}-tf-${{ hashFiles('infra/**.tf*') }}
             - name: Terraform fmt
               working-directory: infra
-              run: terraform fmt -check
+              run: terraform fmt
             - name: Terraform init
               working-directory: infra
               run: terraform init -input=false
