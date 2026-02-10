@@ -1,18 +1,2 @@
-# --- Web Framework & Lambda Adapter ---
-fastapi==0.110.0
-mangum==0.17.0
-uvicorn==0.27.1  # Hỗ trợ chạy test local
-
-# --- AI & Agentic Workflow ---
-langgraph>=0.0.15
-langchain-google-genai>=1.0.0
-langchain-core>=0.1.0
-
-# --- Document Parsing (SOTA) ---
-# Lưu ý: docling có dependencies khá nặng, cần Lambda 2GB RAM như bạn đã config
-docling>=1.0.0
-
-# --- Utilities ---
-pydantic>=2.0.0
-python-multipart  # Để xử lý upload file PDF từ Frontend
-boto3             # Để tương tác với S3 và DynamoDB
+fastapi
+mangum
