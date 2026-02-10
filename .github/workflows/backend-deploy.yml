@@ -27,11 +27,14 @@ jobs:
 
             - name: Build, tag, and push image to Amazon ECR
               env:
-                  ECR_REGISTRY: ${{ steps.login-ecr.registry }}
+                  # Thêm ".outputs" vào đây
+                  ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
                   ECR_REPOSITORY: radiance-backend-image
                   IMAGE_TAG: ${{ github.sha }}
               run: |
-                  # Build từ root project để Dockerfile có thể copy folder services/
+                  # Kiểm tra xem registry có lấy được không trước khi build (để dễ debug)
+                  if [ -z "$ECR_REGISTRY" ]; then echo "Error: ECR_REGISTRY is empty"; exit 1; fi
+
                   docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest -f services/Dockerfile .
                   docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
                   docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
