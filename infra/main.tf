@@ -223,15 +223,7 @@ output "s3_website_url" {
   description = "Link truy cập Website Frontend"
 }
 
-output "lambda_function_name" {
-  value       = aws_lambda_function.backend_api.function_name
-  description = "Tên Lambda Function dùng để deploy Backend"
-}
-
-output "api_endpoint_url" {
-  value       = aws_lambda_function_url.backend_url.function_url
-  description = "API Endpoint để Frontend gọi vào Backend"
-}
+# ===
 
 output "ecr_repository_url" {
   value       = aws_ecr_repository.backend.repository_url
