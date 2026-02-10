@@ -19,9 +19,17 @@ jobs:
             - name: Find changed services # Find the exactly changed services
               id: changed
               run: |
-                  git fetch --prune --unshallow 2>/dev/null || true
-                  SERVICES=$(git --no-pager diff --name-only ${{ github.sha }} ${{ github.sha }}~1 -- services/ | awk -F/ '{print $2}' | sort -u)
-                  echo "services=$SERVICES" >> $GITHUB_OUTPUT
+                  # Nếu là manual trigger, mặc định chọn service là 'radiance' (hoặc tên folder con của bạn)
+                  if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+                    echo "services=backend" >> $GITHUB_OUTPUT
+                  else
+                    git fetch --prune --unshallow 2>/dev/null || true
+                    SERVICES=$(git --no-pager diff --name-only ${{ github.sha }} ${{ github.sha }}~1 -- services/ | awk -F/ '{print $2}' | sort -u)
+                    
+                    # Nếu chạy push nhưng không thấy service nào thay đổi, default về backend để an toàn hoặc báo lỗi
+                    if [ -z "$SERVICES" ]; then SERVICES="backend"; fi
+                    echo "services=$SERVICES" >> $GITHUB_OUTPUT
+                  fi
             - name: Package service # Compress code to .zip
               if: steps.changed.outputs.services != ''
               run: |
