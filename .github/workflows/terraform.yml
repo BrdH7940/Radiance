@@ -17,6 +17,7 @@ jobs:
     fmt-validate-plan:
         name: Format / Validate / Plan (PRs)
         runs-on: ubuntu-latest
+        environment: env
         permissions:
             contents: read
         steps:
@@ -53,7 +54,7 @@ jobs:
         runs-on: ubuntu-latest
         needs: fmt-validate-plan
         if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
-        environment: production
+        environment: env
         permissions:
             contents: read
             actions: write
