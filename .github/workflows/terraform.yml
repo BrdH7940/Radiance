@@ -47,6 +47,18 @@ jobs:
             - name: Terraform plan
               working-directory: infra
               run: terraform plan -out=tfplan -input=false
+
+            - name: Verify generated plan
+              working-directory: infra
+              run: |
+                  echo "Checking infra/tfplan exists..."
+                  if [ ! -f tfplan ]; then
+                    echo "ERROR: Terraform plan not created (infra/tfplan missing)."
+                    ls -la .
+                    exit 1
+                  fi
+                  echo "Plan created: $(stat -c'%n %s bytes' tfplan)"
+
             - name: Upload plan artifact
               uses: actions/upload-artifact@v4
               with:
@@ -72,18 +84,41 @@ jobs:
               uses: hashicorp/setup-terraform@v2
               with:
                   terraform_version: 1.5.0
+
+            - name: Prevent isolated re-run of Apply
+              run: |
+                  # If this run is an isolated re-run (attempt > 1) artifacts from the original run won't be available.
+                  echo "GITHUB_RUN_ATTEMPT=${GITHUB_RUN_ATTEMPT:-1}"
+                  if [ "${GITHUB_RUN_ATTEMPT:-1}" != "1" ]; then
+                    echo "::error::This job appears to be a re-run (GITHUB_RUN_ATTEMPT=${GITHUB_RUN_ATTEMPT}). Artifacts from the original run are NOT available when re-running a single job."
+                    echo "To proceed: re-run the entire workflow or re-run the 'fmt-validate-plan' job so the plan artifact is produced in this run."
+                    exit 1
+                  fi
+
             - name: Download plan
               uses: actions/download-artifact@v4
               with:
                   name: tfplan
                   path: infra
+
+            - name: Unpack/normalize downloaded plan
+              run: |
+                  echo "Listing infra/ after download:"
+                  ls -la infra || true
+                  if [ -f infra/tfplan ]; then
+                    echo "Plan found at infra/tfplan"
+                  elif [ -f infra/tfplan/tfplan ]; then
+                    echo "Nested plan found at infra/tfplan/tfplan — moving to infra/tfplan"
+                    mv infra/tfplan/tfplan infra/tfplan
+                  else
+                    echo "ERROR: Plan artifact not found. Ensure the 'fmt-validate-plan' job produced and uploaded the plan in the same workflow run."
+                    ls -la
+                    exit 1
+                  fi
+
             - name: Terraform init
               working-directory: infra
               run: terraform init -input=false
             - name: Terraform apply (uses plan)
               working-directory: infra
-              env:
-                  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-                  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-                  AWS_REGION: ${{ secrets.AWS_REGION }}
               run: terraform apply -input=false -auto-approve infra/tfplan
