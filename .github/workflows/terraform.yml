@@ -121,4 +121,4 @@ jobs:
               run: terraform init -input=false
             - name: Terraform apply (uses plan)
               working-directory: infra
-              run: terraform apply -input=false -auto-approve infra/tfplan
+              run: terraform apply -input=false -auto-approve tfplan
