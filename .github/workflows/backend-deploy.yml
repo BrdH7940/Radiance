@@ -1,14 +1,14 @@
-name: Backend — package & deploy (fast path)
+name: Backend — package & deploy
 
 on:
     push:
+        branches: [main]
         paths:
             - 'services/**'
-    workflow_dispatch: {} # manual trigger
-    # Fast path: aws lambda update-function-code
+    workflow_dispatch: {}
 
 jobs:
-    package-and-deploy:
+    deploy:
         runs-on: ubuntu-latest
         environment: env
         steps:
@@ -25,23 +25,43 @@ jobs:
               id: login-ecr
               uses: aws-actions/amazon-ecr-login@v2
 
-            - name: Build, tag, and push image to Amazon ECR
+            - name: Build, tag, and push image
               env:
-                  # Thêm ".outputs" vào đây
                   ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
                   ECR_REPOSITORY: radiance-backend-image
                   IMAGE_TAG: ${{ github.sha }}
               run: |
-                  # Kiểm tra xem registry có lấy được không trước khi build (để dễ debug)
-                  if [ -z "$ECR_REGISTRY" ]; then echo "Error: ECR_REGISTRY is empty"; exit 1; fi
+                  if [ -z "$ECR_REGISTRY" ]; then 
+                    echo "Error: ECR_REGISTRY is empty"
+                    exit 1
+                  fi
 
-                  docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest -f services/Dockerfile .
+                  docker build \
+                    -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+                    -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+                    -f services/Dockerfile .
+
                   docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
                   docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
-            - name: Update Lambda (Ignore error if not exists)
+            - name: Update Lambda function
+              env:
+                  ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+                  ECR_REPOSITORY: radiance-backend-image
+                  IMAGE_TAG: ${{ github.sha }}
               run: |
-                  # Lệnh này sẽ lỗi ở lần đầu tiên khi Terraform chưa tạo Lambda, nhưng Image thì đã lên ECR rồi.
+                  # Wait for image to be available
+                  echo "Waiting for image to be fully available..."
+                  sleep 5
+
+                  # Update Lambda function code
                   aws lambda update-function-code \
                     --function-name radiance-backend-api \
-                    --image-uri ${{ steps.login-ecr.registry }}/radiance-backend-image:latest || echo "Lambda chưa tồn tại, chỉ push image lên ECR."
+                    --image-uri $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+                  # Wait for update to complete
+                  echo "Waiting for Lambda update to complete..."
+                  aws lambda wait function-updated \
+                    --function-name radiance-backend-api
+
+                  echo "Lambda function updated successfully"

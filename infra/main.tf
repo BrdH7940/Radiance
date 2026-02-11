@@ -134,19 +134,15 @@ resource "aws_ecr_repository" "backend" {
   }
 }
 
-
-# Lambda Function chính
+# Lambda Function với dummy image ban đầu
 resource "aws_lambda_function" "backend_api" {
   function_name = "radiance-backend-api"
   package_type  = "Image"
   role          = aws_iam_role.lambda_exec_role.arn
 
-  # Image URI will be populated from the ECR repository created above.
-  image_uri = "${aws_ecr_repository.backend.repository_url}:${var.lambda_image_tag}"
+  # Sử dụng image URI với tag "latest" - sẽ được update bởi CI/CD
+  image_uri = "${aws_ecr_repository.backend.repository_url}:latest"
 
-  # Only set sensitive environment variables when the corresponding Terraform
-  # variable is provided. In your case you keep the secrets in GitHub
-  # environment `env` — CI should inject them at deploy time (preferred).
   environment {
     variables = merge(
       { DYNAMODB_TABLE = aws_dynamodb_table.user_data.name },
@@ -155,20 +151,31 @@ resource "aws_lambda_function" "backend_api" {
     )
   }
 
-  # AI workloads need more resources
   memory_size = var.lambda_memory_size
   timeout     = var.lambda_timeout
 
-  # If you need to override the entrypoint/handler exposed by the image,
-  # configure `image_config` here. By default the image should expose
-  # a handler named `handler` (see `services/app.py`).
   image_config {
     command = []
+  }
+
+  # CRITICAL: Ignore image_uri changes sau khi tạo
+  # CI/CD sẽ quản lý việc update image
+  lifecycle {
+    ignore_changes = [
+      image_uri,
+      image_config
+    ]
   }
 
   tags = {
     Project = var.project_name
   }
+
+  # Đảm bảo ECR repository tồn tại trước
+  depends_on = [
+    aws_ecr_repository.backend,
+    aws_iam_role_policy.lambda_policy
+  ]
 }
 
 # Tạo Function URL (Để Frontend gọi được Lambda mà chưa cần API Gateway phức tạp)

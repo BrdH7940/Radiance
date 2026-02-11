@@ -1,0 +1,51 @@
+name: Terraform — Destroy Infrastructure
+
+on:
+    workflow_dispatch:
+        inputs:
+            confirm_destroy:
+                description: 'Type "DESTROY" to confirm'
+                required: true
+                type: string
+
+jobs:
+    destroy:
+        name: Destroy all infrastructure
+        runs-on: ubuntu-latest
+        environment: env
+        permissions:
+            contents: read
+        env:
+            AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+            AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+            AWS_REGION: ${{ secrets.AWS_REGION }}
+
+        steps:
+            - name: Validate confirmation
+              run: |
+                  if [ "${{ github.event.inputs.confirm_destroy }}" != "DESTROY" ]; then
+                    echo "::error::Confirmation failed. You must type 'DESTROY' to proceed."
+                    exit 1
+                  fi
+                  echo "Confirmation validated. Proceeding with destroy..."
+
+            - uses: actions/checkout@v4
+
+            - name: Setup Terraform
+              uses: hashicorp/setup-terraform@v2
+              with:
+                  terraform_version: 1.5.0
+
+            - name: Terraform init
+              working-directory: infra
+              run: terraform init -input=false
+
+            - name: Terraform destroy
+              working-directory: infra
+              run: terraform destroy -auto-approve
+
+            - name: Verify destruction
+              run: |
+                  echo "Infrastructure destroyed successfully"
+                  echo "Note: S3 state bucket and DynamoDB lock table are NOT deleted"
+                  echo "If you need to delete them, do it manually from AWS Console"
