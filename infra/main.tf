@@ -27,22 +27,6 @@ provider "aws" {
 # 1. DATABASE LAYER (DYNAMODB)
 # =============================================================================
 
-resource "aws_dynamodb_table" "terraform_locks" {
-  name         = "terraform_locks"
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "LockID"
-
-  attribute {
-    name = "LockID"
-    type = "S"
-  }
-
-  tags = {
-    Name    = "Terraform State Lock Table"
-    Project = var.project_name
-  }
-}
-
 # Bảng chứa dữ liệu User
 resource "aws_dynamodb_table" "user_data" {
   name         = "UserProfiles"
@@ -140,7 +124,6 @@ resource "aws_lambda_function" "backend_api" {
   package_type  = "Image"
   role          = aws_iam_role.lambda_exec_role.arn
 
-  # Sử dụng image URI với tag "latest" - sẽ được update bởi CI/CD
   image_uri = "${aws_ecr_repository.backend.repository_url}:latest"
 
   environment {
@@ -158,24 +141,16 @@ resource "aws_lambda_function" "backend_api" {
     command = []
   }
 
-  # CRITICAL: Ignore image_uri changes sau khi tạo
-  # CI/CD sẽ quản lý việc update image
+  # THÊM LIFECYCLE RULE - CI/CD sẽ update image
   lifecycle {
     ignore_changes = [
-      image_uri,
-      image_config
+      image_uri
     ]
   }
 
   tags = {
     Project = var.project_name
   }
-
-  # Đảm bảo ECR repository tồn tại trước
-  depends_on = [
-    aws_ecr_repository.backend,
-    aws_iam_role_policy.lambda_policy
-  ]
 }
 
 # Tạo Function URL (Để Frontend gọi được Lambda mà chưa cần API Gateway phức tạp)

@@ -50,18 +50,16 @@ jobs:
                   ECR_REPOSITORY: radiance-backend-image
                   IMAGE_TAG: ${{ github.sha }}
               run: |
-                  # Wait for image to be available
-                  echo "Waiting for image to be fully available..."
+                  echo "Waiting for image to be available..."
                   sleep 5
 
-                  # Update Lambda function code
+                  # Update Lambda with new image
                   aws lambda update-function-code \
                     --function-name radiance-backend-api \
                     --image-uri $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
-                  # Wait for update to complete
                   echo "Waiting for Lambda update to complete..."
                   aws lambda wait function-updated \
                     --function-name radiance-backend-api
 
-                  echo "Lambda function updated successfully"
+                  echo "Lambda function updated successfully with image: $IMAGE_TAG"
