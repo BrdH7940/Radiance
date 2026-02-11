@@ -27,7 +27,7 @@ jobs:
         steps:
             - uses: actions/checkout@v4
 
-            # CRITICAL: Tạo dependencies (S3, DynamoDB, ECR) trước khi Terraform chạy
+            # Tạo dependencies (S3, DynamoDB, ECR) trước khi Terraform chạy
             - name: Bootstrap infrastructure dependencies
               run: |
                   echo "Checking Terraform backend dependencies..."
@@ -38,7 +38,7 @@ jobs:
                   if ! aws s3api head-bucket --bucket "$BUCKET_NAME" 2>/dev/null; then
                     echo "Bucket $BUCKET_NAME missing. Creating..."
                     
-                    # Lệnh tạo bucket (lưu ý: us-east-1 không cần LocationConstraint)
+                    # Tạo bucket
                     if [ "$REGION" == "us-east-1" ]; then
                       aws s3 mb s3://$BUCKET_NAME --region $REGION
                     else
@@ -48,7 +48,7 @@ jobs:
                     # Bật Versioning để an toàn cho file state
                     aws s3api put-bucket-versioning --bucket $BUCKET_NAME --versioning-configuration Status=Enabled
                     
-                    # Bật Encryption (Mã hóa)
+                    # Bật Encryption
                     aws s3api put-bucket-encryption --bucket $BUCKET_NAME --server-side-encryption-configuration '{"Rules": [{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}]}'
                     
                     echo "✓ S3 Bucket created and configured"
@@ -56,7 +56,7 @@ jobs:
                     echo "✓ S3 Bucket already exists"
                   fi
 
-                  # 2. Create DynamoDB lock table if not exists
+                  # Tạo DynamoDB lock table nếu chưa có
                   if ! aws dynamodb describe-table --table-name terraform_locks --region $REGION 2>/dev/null; then
                     echo "Creating terraform_locks table..."
                     aws dynamodb create-table \
@@ -72,7 +72,7 @@ jobs:
                     echo "✓ Lock table already exists"
                   fi
 
-                  # 3. Create ECR repository if not exists (Giữ nguyên logic cũ của bạn)
+                  # Tạo ECR repository nếu chưa có
                   REPO_NAME="radiance-backend-image"
                   if ! aws ecr describe-repositories --repository-names $REPO_NAME --region $REGION 2>/dev/null; then
                     aws ecr create-repository --repository-name $REPO_NAME --region $REGION
@@ -143,7 +143,7 @@ jobs:
               run: |
                   REGION=$AWS_REGION
                   BUCKET="radiance-s3"
-                  # Chỉ tạo những thứ Terraform CẦN để khởi tạo (S3 & DynamoDB Lock)
+                  # Tạo những thứ Terraform cần để khởi tạo (S3 & DynamoDB Lock)
                   aws s3api head-bucket --bucket $BUCKET 2>/dev/null || aws s3 mb s3://$BUCKET --region $REGION
                   aws dynamodb describe-table --table-name terraform_locks 2>/dev/null || \
                     aws dynamodb create-table --table-name terraform_locks \
@@ -160,14 +160,14 @@ jobs:
               working-directory: infra
               run: terraform init -input=false
 
-            # BƯỚC QUAN TRỌNG: Chỉ tạo ECR trước để lấy chỗ push image
+            # Tạo ECR trước để lấy chỗ push image
             - name: Terraform Apply ECR only
               working-directory: infra
               run: terraform apply -target=aws_ecr_repository.backend -auto-approve
 
             - name: Push Placeholder Image
               run: |
-                  # Lấy URL ECR từ output của bước trên hoặc CLI
+                  # Lấy URL ECR từ output của bước trên
                   ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
                   # Lưu ý: Tên repo phải khớp với var.ecr_repo_name trong Terraform
                   REPO_NAME="radiance-backend-image" 
@@ -178,7 +178,7 @@ jobs:
                   docker build -t $ECR_URI:latest -f Dockerfile.placeholder .
                   docker push $ECR_URI:latest
 
-            # Cuối cùng mới Apply toàn bộ (Lambda sẽ tìm thấy image đã push)
+            # Apply toàn bộ
             - name: Terraform Apply Full
               working-directory: infra
               run: terraform apply -auto-approve

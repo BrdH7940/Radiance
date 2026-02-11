@@ -104,7 +104,7 @@ resource "aws_iam_role_policy" "lambda_policy" {
   })
 }
 
-# ECR repository to store Lambda container images
+# ECR repository
 resource "aws_ecr_repository" "backend" {
   name                 = var.ecr_repo_name
   image_tag_mutability = "MUTABLE"
@@ -119,7 +119,7 @@ resource "aws_ecr_repository" "backend" {
   }
 }
 
-# Lambda Function với dummy image ban đầu
+# Lambda Function với dummy image (Lúc mới khởi tạo)
 resource "aws_lambda_function" "backend_api" {
   function_name = "radiance-backend-api"
   package_type  = "Image"
@@ -142,7 +142,6 @@ resource "aws_lambda_function" "backend_api" {
     command = []
   }
 
-  # THÊM LIFECYCLE RULE - CI/CD sẽ update image
   lifecycle {
     ignore_changes = [
       image_uri
@@ -157,7 +156,7 @@ resource "aws_lambda_function" "backend_api" {
 # Tạo Function URL (Để Frontend gọi được Lambda mà chưa cần API Gateway phức tạp)
 resource "aws_lambda_function_url" "backend_url" {
   function_name      = aws_lambda_function.backend_api.function_name
-  authorization_type = "NONE" # Public access cho Sprint 0, sau này sẽ auth sau
+  authorization_type = "NONE" # Public access, sau này có auth sau
 
   cors {
     allow_credentials = true
@@ -174,17 +173,17 @@ resource "aws_lambda_function_url" "backend_url" {
 # 3. FRONTEND LAYER (S3 STATIC WEBSITE)
 # =============================================================================
 
-# Tạo Bucket tên ngẫu nhiên (để tránh trùng lặp global)
+# Tạo Bucket ngẫu nhiên
 resource "aws_s3_bucket" "frontend_bucket" {
   bucket_prefix = "radiance-frontend-"
-  force_destroy = true # Cho phép xóa bucket kể cả khi có file (cẩn thận khi dùng Prod thật)
+  force_destroy = true
 
   tags = {
     Project = var.project_name
   }
 }
 
-# Cấu hình Web Hosting
+# Web Hosting
 resource "aws_s3_bucket_website_configuration" "frontend_config" {
   bucket = aws_s3_bucket.frontend_bucket.id
 
@@ -197,12 +196,12 @@ resource "aws_s3_bucket_website_configuration" "frontend_config" {
   }
 }
 
-# Mở khóa Public Access
+# Public Access
 resource "aws_s3_bucket_public_access_block" "frontend_public" {
   bucket = aws_s3_bucket.frontend_bucket.id
 
   block_public_acls       = false
-  block_public_policy     = false  # ← Quan trọng nhất
+  block_public_policy     = false
   ignore_public_acls      = false
   restrict_public_buckets = false
 }
@@ -210,8 +209,6 @@ resource "aws_s3_bucket_public_access_block" "frontend_public" {
 # Policy cho phép ai cũng đọc được file
 resource "aws_s3_bucket_policy" "frontend_policy" {
   bucket     = aws_s3_bucket.frontend_bucket.id
-  
-  # CRITICAL: Đảm bảo public access block được tắt TRƯỚC KHI set policy
   depends_on = [aws_s3_bucket_public_access_block.frontend_public]
 
   policy = jsonencode({
