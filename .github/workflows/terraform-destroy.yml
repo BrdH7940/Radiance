@@ -11,6 +11,8 @@ on:
 jobs:
     destroy:
         name: Destroy all infrastructure
+        # Chỉ chạy nếu nhập đúng chữ DESTROY để tránh thảm họa nhầm lẫn
+        if: github.event.inputs.confirm_destroy == 'DESTROY'
         runs-on: ubuntu-latest
         environment: env
         env:
@@ -19,6 +21,7 @@ jobs:
             AWS_REGION: ${{ secrets.AWS_REGION }}
         steps:
             - uses: actions/checkout@v4
+
             - name: Configure AWS credentials
               uses: aws-actions/configure-aws-credentials@v2
               with:
@@ -33,22 +36,33 @@ jobs:
               working-directory: infra
               run: |
                   terraform init -reconfigure
+                  # Dùng -lock=false nếu state bị kẹt lock cũ
                   terraform destroy -auto-approve
 
-            - name: FINAL NUKE (Clean everything else)
+            - name: FINAL NUKE (The "No Mercy" Step)
+              if: always() # Chạy kể cả khi lệnh terraform destroy ở trên bị lỗi
               run: |
-                  echo "Cleaning up leftovers..."
-                  # 1. Force delete ECR (nếu terraform destroy chưa xóa hết vì còn image)
-                  REPO_NAME="radiance-backend-image"
-                  aws ecr delete-repository --repository-name $REPO_NAME --force 2>/dev/null || true
+                  echo "🚀 Starting total vaporization..."
 
-                  # 2. Xóa Frontend Bucket (tìm theo prefix để chắc chắn sạch)
+                  # 1. Quét sạch ECR (Phòng hờ Terraform lỗi giữa chừng)
+                  REPO_NAME="radiance-backend-image"
+                  echo "Checking ECR: $REPO_NAME"
+                  aws ecr delete-repository --repository-name $REPO_NAME --force 2>/dev/null || echo "ECR already gone."
+
+                  # 2. Quét sạch Frontend Buckets (Dựa trên prefix)
+                  echo "Searching for frontend buckets..."
                   for bucket in $(aws s3 ls | grep radiance-frontend | awk '{print $3}'); do
+                    echo "Nuking bucket: $bucket"
                     aws s3 rb s3://$bucket --force
                   done
 
-                  # 3. Xóa Backend S3 & DynamoDB (Cái này làm hỏng state nhưng bạn muốn sạch)
-                  aws s3 rb s3://radiance-s3 --force 2>/dev/null || true
-                  aws dynamodb delete-table --table-name terraform_locks 2>/dev/null || true
+                  # 3. PHÁ HỦY BACKEND STATE (Điểm không thể quay đầu)
+                  # Xóa S3 chứa file state 
+                  echo "Deleting Backend S3..."
+                  aws s3 rb s3://radiance-s3 --force 2>/dev/null || echo "Backend S3 already gone."
 
-                  echo "✓ All infrastructure has been vaporized."
+                  # Xóa DynamoDB table dùng để lock 
+                  echo "Deleting DynamoDB Lock Table..."
+                  aws dynamodb delete-table --table-name terraform_locks 2>/dev/null || echo "Lock table already gone."
+
+                  echo "✅ All infrastructure and state management have been vaporized."
