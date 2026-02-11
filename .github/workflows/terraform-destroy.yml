@@ -69,19 +69,46 @@ jobs:
               working-directory: infra
               run: terraform destroy -auto-approve
 
-            # FIX 3: Cải tiến phần kiểm tra sau khi xóa
+            # CHIÊU CUỐI: Xóa nốt những thứ Terraform không dám tự xóa
+            - name: Nuke Backend Infrastructure (S3 & DynamoDB Lock)
+              run: |
+                  echo "=== FINAL CLEANUP: Backend Resources ==="
+
+                  # 1. Xóa Backend S3 Bucket (Chứa file .tfstate)
+                  # --force sẽ xóa toàn bộ version và file bên trong trước khi xóa bucket
+                  BACKEND_BUCKET="radiance-s3"
+                  echo "Deleting Backend Bucket: $BACKEND_BUCKET"
+                  aws s3 rb s3://$BACKEND_BUCKET --force || echo "Backend bucket already deleted or not found."
+
+                  # 2. Xóa DynamoDB Lock Table
+                  LOCK_TABLE="terraform_locks"
+                  echo "Deleting Lock Table: $LOCK_TABLE"
+                  aws dynamodb delete-table --table-name $LOCK_TABLE 2>/dev/null || echo "Lock table already deleted."
+
+                  # Đợi một chút để AWS cập nhật trạng thái xóa
+                  sleep 10
+
             - name: Cleanup verification
               run: |
-                  echo "=== Post-Destroy Check ==="
+                  echo "=== FINAL VERIFICATION ==="
 
-                  # Check ECR - liệt kê để xem còn cái nào liên quan không
+                  # Kiểm tra ECR
                   REPOS=$(aws ecr describe-repositories --query 'repositories[*].repositoryName' --output text | grep "radiance" || true)
-                  [ -z "$REPOS" ] && echo "✓ All ECR repos cleared" || echo "⚠️ Remaining repos: $REPOS"
+                  [ -z "$REPOS" ] && echo "✓ ECR: Clean" || echo "⚠️ ECR still exists: $REPOS"
 
-                  # Check S3
+                  # Kiểm tra S3 (Tất cả bucket liên quan đến radiance)
                   BUCKETS=$(aws s3 ls | grep "radiance" || true)
-                  [ -z "$BUCKETS" ] && echo "✓ All S3 buckets cleared" || echo "⚠️ Remaining buckets: $BUCKETS"
+                  if [ -z "$BUCKETS" ]; then
+                    echo "✓ S3: Clean"
+                  else
+                    echo "⚠️ S3 still exists:"
+                    echo "$BUCKETS"
+                  fi
 
-                  # Check Lambda
+                  # Kiểm tra DynamoDB (Cả table data và table lock)
+                  TABLES=$(aws dynamodb list-tables --query 'TableNames[*]' --output text | tr '\t' '\n' | grep -E "UserProfiles|terraform_locks" || true)
+                  [ -z "$TABLES" ] && echo "✓ DynamoDB: Clean" || echo "⚠️ DynamoDB still exists: $TABLES"
+
+                  # Kiểm tra Lambda
                   LAMBDAS=$(aws lambda list-functions --query 'Functions[*].FunctionName' --output text | grep "radiance" || true)
-                  [ -z "$LAMBDAS" ] && echo "✓ All Lambdas cleared" || echo "⚠️ Remaining lambdas: $LAMBDAS"
+                  [ -z "$LAMBDAS" ] && echo "✓ Lambda: Clean" || echo "⚠️ Lambda still exists: $LAMBDAS"
