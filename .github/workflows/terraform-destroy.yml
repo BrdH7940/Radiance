@@ -34,35 +34,44 @@ jobs:
 
             - name: Terraform Init & Destroy
               working-directory: infra
+              continue-on-error: true # Nếu Terraform lỗi, vẫn chạy bước tiếp theo
               run: |
-                  terraform init -reconfigure
-                  # Dùng -lock=false nếu state bị kẹt lock cũ
-                  terraform destroy -auto-approve
+                  # 1. Khởi tạo lại, chấp nhận việc backend có thể đã mất
+                  terraform init -reconfigure -input=false || true
 
-            - name: FINAL NUKE (The "No Mercy" Step)
-              if: always() # Chạy kể cả khi lệnh terraform destroy ở trên bị lỗi
+                  # 2. Xóa với flag -lock=false để bỏ qua lỗi DynamoDB lock
+                  # Sử dụng -refresh=false nếu state file cũng gặp vấn đề
+                  terraform destroy -auto-approve -lock=false || echo "Terraform destroy failed, moving to manual nuke..."
+
+            - name: TOTAL MANUAL NUKE (Càn quét toàn bộ tài nguyên)
+              if: always() # Luôn luôn chạy dù các bước trước thành công hay thất bại
               run: |
-                  echo "🚀 Starting total vaporization..."
+                  echo "🔥 Bắt đầu chiến dịch dọn dẹp cưỡng bức..."
 
-                  # 1. Quét sạch ECR (Phòng hờ Terraform lỗi giữa chừng)
+                  # 1. Xóa Lambda Function 
+                  aws lambda delete-function --function-name radiance-backend-api 2>/dev/null || true
+
+                  # 2. Xóa ECR Repository (Force xóa kể cả có image) 
                   REPO_NAME="radiance-backend-image"
-                  echo "Checking ECR: $REPO_NAME"
-                  aws ecr delete-repository --repository-name $REPO_NAME --force 2>/dev/null || echo "ECR already gone."
+                  aws ecr delete-repository --repository-name $REPO_NAME --force 2>/dev/null || true
 
-                  # 2. Quét sạch Frontend Buckets (Dựa trên prefix)
-                  echo "Searching for frontend buckets..."
+                  # 3. Xóa DynamoDB Table dữ liệu 
+                  aws dynamodb delete-table --table-name UserProfiles 2>/dev/null || true
+
+                  # 4. Xóa IAM Role & Policy 
+                  # Phải xóa Policy đính kèm trước khi xóa Role
+                  aws iam delete-role-policy --role-name radiance_lambda_role --policy-name radiance_lambda_policy 2>/dev/null || true
+                  aws iam delete-role --role-name radiance_lambda_role 2>/dev/null || true
+
+                  # 5. Xóa các S3 Frontend Buckets (Tìm theo prefix) [cite: 11]
                   for bucket in $(aws s3 ls | grep radiance-frontend | awk '{print $3}'); do
-                    echo "Nuking bucket: $bucket"
+                    echo "Deleting bucket: $bucket"
                     aws s3 rb s3://$bucket --force
                   done
 
-                  # 3. PHÁ HỦY BACKEND STATE (Điểm không thể quay đầu)
-                  # Xóa S3 chứa file state 
-                  echo "Deleting Backend S3..."
-                  aws s3 rb s3://radiance-s3 --force 2>/dev/null || echo "Backend S3 already gone."
+                  # 6. HỦY DIỆT BACKEND (Xóa sạch dấu vết Terraform) 
+                  echo "Vaporizing Terraform Backend..."
+                  aws s3 rb s3://radiance-s3 --force 2>/dev/null || true
+                  aws dynamodb delete-table --table-name terraform_locks 2>/dev/null || true
 
-                  # Xóa DynamoDB table dùng để lock 
-                  echo "Deleting DynamoDB Lock Table..."
-                  aws dynamodb delete-table --table-name terraform_locks 2>/dev/null || echo "Lock table already gone."
-
-                  echo "✅ All infrastructure and state management have been vaporized."
+                  echo "✅ Mọi thứ đã được quét sạch."
