@@ -26,6 +26,21 @@ jobs:
             AWS_REGION: ${{ secrets.AWS_REGION }}
         steps:
             - uses: actions/checkout@v4
+            - name: Pre-flight cleanup
+              run: |
+                  echo "Checking for orphaned resources..."
+
+                  # Check if terraform_locks table exists and delete it
+                  if aws dynamodb describe-table --table-name terraform_locks --region $AWS_REGION 2>/dev/null; then
+                    echo "Found orphaned terraform_locks table, deleting..."
+                    aws dynamodb delete-table --table-name terraform_locks --region $AWS_REGION
+                    echo "Waiting for table deletion..."
+                    aws dynamodb wait table-not-exists --table-name terraform_locks --region $AWS_REGION
+                    echo "Table deleted successfully"
+                  else
+                    echo "No orphaned terraform_locks table found"
+                  fi
+              continue-on-error: true
             - name: Setup Terraform
               uses: hashicorp/setup-terraform@v2
               with:

@@ -226,14 +226,16 @@ resource "aws_s3_bucket_public_access_block" "frontend_public" {
   bucket = aws_s3_bucket.frontend_bucket.id
 
   block_public_acls       = false
-  block_public_policy     = false
+  block_public_policy     = false  # ← Quan trọng nhất
   ignore_public_acls      = false
   restrict_public_buckets = false
 }
 
-# Policy cho phép ai cũng đọc được file (để hiển thị web)
+# Policy cho phép ai cũng đọc được file
 resource "aws_s3_bucket_policy" "frontend_policy" {
   bucket     = aws_s3_bucket.frontend_bucket.id
+  
+  # CRITICAL: Đảm bảo public access block được tắt TRƯỚC KHI set policy
   depends_on = [aws_s3_bucket_public_access_block.frontend_public]
 
   policy = jsonencode({
