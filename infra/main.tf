@@ -15,7 +15,7 @@ terraform {
     key            = "state/terraform.tfstate"
     region         = "us-east-1"
     encrypt        = true
-    dynamodb_table = "terraform_locks"
+    dynamodb_table = "terraform_locks" # Race condition
   }
 }
 
@@ -27,7 +27,7 @@ provider "aws" {
 # 1. DATABASE LAYER (DYNAMODB)
 # =============================================================================
 
-# Bảng chứa dữ liệu User
+# User Database
 resource "aws_dynamodb_table" "user_data" {
   name         = "UserProfiles"
   billing_mode = "PAY_PER_REQUEST"
@@ -58,7 +58,7 @@ resource "aws_dynamodb_table" "user_data" {
 # 2. BACKEND LAYER (LAMBDA)
 # =============================================================================
 
-# IAM
+# IAM for AWS lambda
 resource "aws_iam_role" "lambda_exec_role" {
   name = "radiance_lambda_role"
 
@@ -72,7 +72,7 @@ resource "aws_iam_role" "lambda_exec_role" {
   })
 }
 
-# Gán quyền ghi Log và truy cập DynamoDB cho Lambda
+# Lambda can: CloudWatch Logging + Interact DynamoDB
 resource "aws_iam_role_policy" "lambda_policy" {
   name = "radiance_lambda_policy"
   role = aws_iam_role.lambda_exec_role.id
@@ -119,7 +119,7 @@ resource "aws_ecr_repository" "backend" {
   }
 }
 
-# Lambda Function với dummy image (Lúc mới khởi tạo)
+# Lambda Function with initial dummy image
 resource "aws_lambda_function" "backend_api" {
   function_name = "radiance-backend-api"
   package_type  = "Image"
@@ -153,10 +153,10 @@ resource "aws_lambda_function" "backend_api" {
   }
 }
 
-# Tạo Function URL (Để Frontend gọi được Lambda mà chưa cần API Gateway phức tạp)
+# Function URL (Frontend can call Lambda with no API gateway)
 resource "aws_lambda_function_url" "backend_url" {
   function_name      = aws_lambda_function.backend_api.function_name
-  authorization_type = "NONE" # Public access, sau này có auth sau
+  authorization_type = "NONE" # Public access, auth coming soon
 
   cors {
     allow_credentials = true
@@ -173,7 +173,7 @@ resource "aws_lambda_function_url" "backend_url" {
 # 3. FRONTEND LAYER (S3 STATIC WEBSITE)
 # =============================================================================
 
-# Tạo Bucket ngẫu nhiên
+# Random bucket init
 resource "aws_s3_bucket" "frontend_bucket" {
   bucket_prefix = "radiance-frontend-"
   force_destroy = true
@@ -183,7 +183,7 @@ resource "aws_s3_bucket" "frontend_bucket" {
   }
 }
 
-# Web Hosting
+# Web hosting
 resource "aws_s3_bucket_website_configuration" "frontend_config" {
   bucket = aws_s3_bucket.frontend_bucket.id
 
@@ -206,7 +206,7 @@ resource "aws_s3_bucket_public_access_block" "frontend_public" {
   restrict_public_buckets = false
 }
 
-# Policy cho phép ai cũng đọc được file
+# Anyone can read files
 resource "aws_s3_bucket_policy" "frontend_policy" {
   bucket     = aws_s3_bucket.frontend_bucket.id
   depends_on = [aws_s3_bucket_public_access_block.frontend_public]
@@ -225,6 +225,7 @@ resource "aws_s3_bucket_policy" "frontend_policy" {
   })
 }
 
+# Remain only 5 most recent docker images
 resource "aws_ecr_lifecycle_policy" "backend_policy" {
   repository = aws_ecr_repository.backend.name
 
@@ -245,7 +246,7 @@ resource "aws_ecr_lifecycle_policy" "backend_policy" {
 }
 
 # =============================================================================
-# 4. OUTPUTS (Thông tin cần thiết để config CI/CD)
+# 4. OUTPUTS
 # =============================================================================
 
 output "s3_frontend_bucket_name" {
