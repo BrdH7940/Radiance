@@ -12,6 +12,8 @@ terraform-destroy.yml
 .terraform.rc
 terraform.rc
 
+test_data/
+
 # Logs
 logs
 *.log
