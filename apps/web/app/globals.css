@@ -14,7 +14,7 @@
 
 html {
     scrollbar-width: thin;
-    scrollbar-color: #a82eff var(--color-bg-2);
+    scrollbar-color: transparent transparent;
 }
 
 html,
@@ -38,12 +38,35 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-    background: linear-gradient(#642bff, #ff22e6);
+    background: transparent;
     border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: transparent;
+}
+
+/* White scrollbar for JD textarea only */
+.jd-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: #ffffff transparent;
+}
+
+.jd-scrollbar::-webkit-scrollbar {
+    width: 8px;
+}
+
+.jd-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.jd-scrollbar::-webkit-scrollbar-thumb {
+    background: #ffffff;
+    border-radius: 4px;
+}
+
+.jd-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.8);
 }
 
 /* Blueprint grid overlay utility */
