@@ -53,7 +53,7 @@ export default function UploadPage() {
     <>
       {isAnalyzing && <AnalyzingOverlay />}
 
-      <div className="min-h-screen bg-midnight overflow-hidden">
+      <div className="min-h-screen bg-midnight overflow-x-hidden overflow-y-auto">
         {/* Background elements */}
         <div className="glow-blob w-[600px] h-[600px] -top-32 -left-32 bg-blue-700/15" />
         <div className="glow-blob w-[500px] h-[500px] top-1/2 -right-40 bg-violet-700/12" />
