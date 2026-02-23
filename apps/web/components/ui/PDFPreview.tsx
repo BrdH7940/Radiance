@@ -123,12 +123,23 @@ function parseLatex(latex: string): ParsedCV {
 
 // ─── Paper renderer ───────────────────────────────────────────────────────────
 
+interface PdfTextClickInfo {
+  word: string;
+  before: string;
+  after: string;
+}
+
 interface PDFPreviewProps {
   latexCode: string;
   isCompiling?: boolean;
+  onTextDoubleClick?: (info: PdfTextClickInfo) => void;
 }
 
-export function PDFPreview({ latexCode, isCompiling = false }: PDFPreviewProps) {
+export function PDFPreview({
+  latexCode,
+  isCompiling = false,
+  onTextDoubleClick,
+}: PDFPreviewProps) {
   const cv = useMemo(() => parseLatex(latexCode), [latexCode]);
 
   const [zoom, setZoom] = useState(100);
@@ -150,6 +161,29 @@ export function PDFPreview({ latexCode, isCompiling = false }: PDFPreviewProps) 
   const handleNextPage = useCallback(() => {
     setPage((p) => Math.min(totalPages, p + 1));
   }, [totalPages]);
+
+  const handleDoubleClick = useCallback(() => {
+    if (!onTextDoubleClick || typeof window === 'undefined') return;
+
+    const selection = window.getSelection?.();
+    if (!selection || selection.rangeCount === 0) return;
+
+    const text = selection.toString().trim();
+    if (!text) return;
+
+    const range = selection.getRangeAt(0);
+    const containerText = range.startContainer.textContent ?? '';
+    const offset = range.startOffset;
+
+    const before = containerText.slice(Math.max(0, offset - 30), offset);
+    const after = containerText.slice(offset, offset + 30);
+
+    onTextDoubleClick({
+      word: text,
+      before,
+      after,
+    });
+  }, [onTextDoubleClick]);
 
   return (
     <div className="relative h-full w-full bg-[#020617] flex flex-col overflow-hidden">
@@ -231,7 +265,10 @@ export function PDFPreview({ latexCode, isCompiling = false }: PDFPreviewProps) 
             </div>
           )}
 
-          <div className="px-8 py-8 text-[11px] leading-[1.5] text-[#111]">
+          <div
+            className="px-8 py-8 text-[11px] leading-[1.5] text-[#111]"
+            onDoubleClickCapture={handleDoubleClick}
+          >
 
             {/* ── Header ──────────────────────────────────────────────────── */}
             <div className="text-center mb-4 pb-4 border-b-2 border-[#1d4ed8]">

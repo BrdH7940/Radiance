@@ -53,6 +53,8 @@ export default function WorkspacePage() {
 
   // Local UI state
   const [selectionInfo, setSelectionInfo] = useState<SelectionInfo | null>(null);
+  const [aiMenuSelection, setAiMenuSelection] = useState<SelectionInfo | null>(null);
+  const latestSelectionRef = useRef<SelectionInfo | null>(null);
   const [isCompiling, setIsCompiling] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const notifIdRef = useRef(0);
@@ -145,15 +147,23 @@ export default function WorkspacePage() {
     editorRef.current = editor;
   }, []);
 
-  const handleNavigateToLine = useCallback((lineNumber: number) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const editor = editorRef.current as any;
-    if (!editor || !lineNumber) return;
+  const handleNavigateToPosition = useCallback(
+    (lineNumber: number, columnNumber = 1) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const editor = editorRef.current as any;
+      if (!editor || !lineNumber) return;
 
-    editor.revealLineInCenter(lineNumber);
-    editor.setPosition({ lineNumber, column: 1 });
-    editor.focus();
-  }, []);
+      editor.revealPositionInCenter({ lineNumber, column: columnNumber });
+      editor.setPosition({ lineNumber, column: columnNumber });
+      editor.focus();
+    },
+    [],
+  );
+
+  const handleNavigateToLine = useCallback(
+    (lineNumber: number) => handleNavigateToPosition(lineNumber, 1),
+    [handleNavigateToPosition],
+  );
 
   const toggleSectionExpanded = useCallback((id: string) => {
     setExpandedSections((prev) => {
@@ -246,6 +256,10 @@ export default function WorkspacePage() {
     [setLatexCode],
   );
 
+  const handleSelectionChange = useCallback((info: SelectionInfo | null) => {
+    latestSelectionRef.current = info;
+  }, []);
+
   // ── AI edit apply ─────────────────────────────────────────────────────────
 
   const handleAIApply = useCallback(
@@ -267,12 +281,32 @@ export default function WorkspacePage() {
         },
       ]);
 
-      // Clear selection and close menu
+      // Clear selection + menu when AI applied
       setSelectionInfo(null);
+      setAiMenuSelection(null);
       showNotification('AI rewrite applied!', 'success');
     },
     [showNotification],
   );
+
+  // ── Selection finalize (delay AI menu until mouseup) ────────────────────────
+
+  useEffect(() => {
+    const handleMouseUp = () => {
+      const current = latestSelectionRef.current;
+      if (current && current.selectedText.trim()) {
+        setSelectionInfo(current);
+      } else {
+        setSelectionInfo(null);
+        setAiMenuSelection(null);
+      }
+    };
+
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
 
   // ── Toolbar actions ───────────────────────────────────────────────────────
 
@@ -492,7 +526,7 @@ export default function WorkspacePage() {
                 <MonacoEditorWrapper
                   value={latexCode}
                   onChange={handleEditorChange}
-                  onSelectionChange={setSelectionInfo}
+                  onSelectionChange={handleSelectionChange}
                   onEditorMount={handleEditorMount}
                 />
               </div>
@@ -510,16 +544,53 @@ export default function WorkspacePage() {
 
         {/* Right column — PDF Preview */}
         <div className="flex-1 flex flex-col min-w-0">
-          <PDFPreview latexCode={latexCode} isCompiling={isCompiling} />
+          <PDFPreview
+            latexCode={latexCode}
+            isCompiling={isCompiling}
+            onTextDoubleClick={({ word }) => {
+              const trimmedWord = word.trim();
+              if (!trimmedWord) return;
+
+              let index = latexCode.indexOf(trimmedWord);
+              if (index === -1) {
+                index = latexCode.toLowerCase().indexOf(trimmedWord.toLowerCase());
+              }
+              if (index === -1) return;
+
+              const before = latexCode.slice(0, index);
+              const lineNumber = before.split('\n').length;
+              const lastLineBreak = before.lastIndexOf('\n');
+              const columnNumber = index - lastLineBreak;
+
+              handleNavigateToPosition(lineNumber, columnNumber);
+            }}
+          />
         </div>
       </div>
 
-      {/* ── Floating AI menu (Phase 3) ───────────────────────────────────── */}
+      {/* ── AI trigger icon near selection ───────────────────────────────── */}
       {selectionInfo && (
+        <button
+          type="button"
+          onClick={() => setAiMenuSelection(selectionInfo)}
+          style={{
+            position: 'fixed',
+            top: selectionInfo.screenPosition.top - 32,
+            left: selectionInfo.screenPosition.left,
+            zIndex: 45,
+          }}
+          className="w-7 h-7 rounded-full bg-violet-600 text-white flex items-center justify-center shadow-lg border border-white/40 hover:brightness-110"
+        >
+          <Zap className="w-3.5 h-3.5" />
+        </button>
+      )}
+
+      {/* ── Floating AI menu ─────────────────────────────────────────────── */}
+      {aiMenuSelection && (
         <FloatingAIMenu
-          selectionInfo={selectionInfo}
+          selectionInfo={aiMenuSelection}
           onApply={handleAIApply}
-          onClose={() => setSelectionInfo(null)}
+          onClose={() => setAiMenuSelection(null)}
           aiEdit={aiEditSelectedText}
         />
       )}
