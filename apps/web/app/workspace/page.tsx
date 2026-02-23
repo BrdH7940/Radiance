@@ -1,12 +1,14 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Download,
   FileCode2,
   Zap,
   ChevronLeft,
+  ChevronRight,
+  ChevronDown,
   RefreshCw,
   CheckCircle2,
   AlertCircle,
@@ -30,6 +32,19 @@ interface Notification {
   type: NotificationType;
 }
 
+interface TexSubsection {
+  id: string;
+  title: string;
+  line: number;
+}
+
+interface TexSection {
+  id: string;
+  title: string;
+  line: number;
+  subsections: TexSubsection[];
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function WorkspacePage() {
@@ -44,6 +59,63 @@ export default function WorkspacePage() {
 
   // Monaco editor instance ref (populated via onEditorMount callback)
   const editorRef = useRef<unknown>(null);
+  const [leftPaneWidth, setLeftPaneWidth] = useState(50);
+  const [isResizing, setIsResizing] = useState(false);
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  const splitPaneRef = useRef<HTMLDivElement | null>(null);
+  const editorColumnRef = useRef<HTMLDivElement | null>(null);
+  const [tocWidth, setTocWidth] = useState(24);
+  const [isResizingToc, setIsResizingToc] = useState(false);
+
+  const texTocSections = useMemo<TexSection[]>(() => {
+    if (!latexCode) return [];
+
+    const lines = latexCode.split('\n');
+    const sectionRegex = /\\section\{([^}]*)\}/;
+    const subsectionRegex = /\\subsection\{([^}]*)\}/;
+
+    const sections: TexSection[] = [];
+    let currentSection: TexSection | null = null;
+
+    lines.forEach((line, index) => {
+      const lineNumber = index + 1;
+
+      const sectionMatch = line.match(sectionRegex);
+      if (sectionMatch && sectionMatch[1]) {
+        currentSection = {
+          id: `sec-${lineNumber}`,
+          title: sectionMatch[1].trim(),
+          line: lineNumber,
+          subsections: [],
+        };
+        sections.push(currentSection);
+        return;
+      }
+
+      const subsectionMatch = line.match(subsectionRegex);
+      if (subsectionMatch && subsectionMatch[1]) {
+        const subsection: TexSubsection = {
+          id: `subsec-${lineNumber}`,
+          title: subsectionMatch[1].trim(),
+          line: lineNumber,
+        };
+
+        if (currentSection) {
+          currentSection.subsections.push(subsection);
+        } else {
+          // Subsection appears before any section — treat as its own standalone section
+          sections.push({
+            id: `orphan-sec-${lineNumber}`,
+            title: subsection.title,
+            line: lineNumber,
+            subsections: [],
+          });
+        }
+      }
+    });
+
+    return sections;
+  }, [latexCode]);
 
   // ── Guard ─────────────────────────────────────────────────────────────────
 
@@ -72,6 +144,102 @@ export default function WorkspacePage() {
   const handleEditorMount = useCallback((editor: unknown) => {
     editorRef.current = editor;
   }, []);
+
+  const handleNavigateToLine = useCallback((lineNumber: number) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const editor = editorRef.current as any;
+    if (!editor || !lineNumber) return;
+
+    editor.revealLineInCenter(lineNumber);
+    editor.setPosition({ lineNumber, column: 1 });
+    editor.focus();
+  }, []);
+
+  const toggleSectionExpanded = useCallback((id: string) => {
+    setExpandedSections((prev) => {
+      const next = { ...prev };
+      next[id] = !next[id];
+      return next;
+    });
+  }, []);
+
+  const handleTocResizeMouseDown = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      setIsResizingToc(true);
+    },
+    [],
+  );
+
+  const handleResizeMouseDown = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      setIsResizing(true);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handleMouseMove = (event: MouseEvent) => {
+      const container = splitPaneRef.current;
+      if (!container) return;
+
+      const rect = container.getBoundingClientRect();
+      const relativeX = event.clientX - rect.left;
+      const percentage = (relativeX / rect.width) * 100;
+
+      const minLeft = 25;
+      const maxLeft = 75;
+      const clamped = Math.max(minLeft, Math.min(maxLeft, percentage));
+
+      setLeftPaneWidth(clamped);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
+
+  useEffect(() => {
+    if (!isResizingToc) return;
+
+    const handleMouseMove = (event: MouseEvent) => {
+      const container = editorColumnRef.current;
+      if (!container) return;
+
+      const rect = container.getBoundingClientRect();
+      const relativeX = event.clientX - rect.left;
+      const percentage = (relativeX / rect.width) * 100;
+
+      const minToc = 14;
+      const maxToc = 40;
+      const clamped = Math.max(minToc, Math.min(maxToc, percentage));
+
+      setTocWidth(clamped);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingToc(false);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizingToc]);
 
   const handleEditorChange = useCallback(
     (value: string) => setLatexCode(value),
@@ -218,10 +386,17 @@ export default function WorkspacePage() {
       </div>
 
       {/* ── Split pane ───────────────────────────────────────────────────── */}
-      <div className="flex-1 flex overflow-hidden min-h-0">
+      <div
+        ref={splitPaneRef}
+        className="flex-1 flex overflow-hidden min-h-0"
+      >
 
         {/* Left column — LaTeX Editor */}
-        <div className="relative flex-1 flex flex-col border-r border-white/5 min-w-0">
+        <div
+          ref={editorColumnRef}
+          className="relative flex flex-col border-r border-white/5 min-w-0 flex-none"
+          style={{ width: `${leftPaneWidth}%` }}
+        >
           {/* Column header */}
           <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-white/5 bg-[#05070a]">
             <div className="flex items-center gap-2">
@@ -241,16 +416,97 @@ export default function WorkspacePage() {
             )}
           </div>
 
-          {/* Monaco */}
-          <div className="flex-1 min-h-0">
-            <MonacoEditorWrapper
-              value={latexCode}
-              onChange={handleEditorChange}
-              onSelectionChange={setSelectionInfo}
-              onEditorMount={handleEditorMount}
-            />
+          {/* Editor area with vertical TOC gutter */}
+          <div className="flex flex-1 min-h-0">
+            {texTocSections.length > 0 && (
+              <div
+                className="border-r border-white/5 bg-[#020617] flex flex-col flex-none"
+                style={{ width: `${tocWidth}%` }}
+              >
+                <div className="px-3 pt-2 pb-1 text-xs font-semibold text-slate-300 uppercase tracking-[0.12em]">
+                  File outline
+                </div>
+                <div className="flex-1 overflow-y-auto pb-2">
+                  {texTocSections.map((section) => {
+                    const isExpanded = expandedSections[section.id] ?? true;
+                    return (
+                      <div
+                        key={section.id}
+                        className="px-2 py-1 border-b border-white/5/40 last:border-b-0"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => toggleSectionExpanded(section.id)}
+                            className="w-5 h-5 flex items-center justify-center rounded hover:bg-white/5 text-slate-300"
+                            aria-label={isExpanded ? 'Collapse section' : 'Expand section'}
+                          >
+                            {isExpanded ? (
+                              <ChevronDown className="w-3 h-3" />
+                            ) : (
+                              <ChevronRight className="w-3 h-3" />
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleNavigateToLine(section.line)}
+                            className="flex-1 text-left text-sm font-medium text-slate-100 hover:text-indigo-200 hover:bg-white/5 rounded px-1 py-0.5 truncate"
+                          >
+                            {section.title}
+                          </button>
+                        </div>
+                        {isExpanded && section.subsections.length > 0 && (
+                          <div className="mt-0.5 ml-4 pl-2 border-l border-slate-800 flex flex-col gap-0.5">
+                            {section.subsections.map((sub) => (
+                              <button
+                                key={sub.id}
+                                type="button"
+                                onClick={() => handleNavigateToLine(sub.line)}
+                                className="w-full text-left text-xs text-slate-300 hover:text-slate-100 hover:bg-white/5 rounded px-1 py-0.5 truncate"
+                              >
+                                {sub.title}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Inner resize handle between TOC and editor */}
+            {texTocSections.length > 0 && (
+              <div
+                onMouseDown={handleTocResizeMouseDown}
+                className={`flex-none w-1 cursor-col-resize bg-indigo-500/40 hover:bg-indigo-500/70 transition-colors ${
+                  isResizingToc ? 'bg-indigo-500' : ''
+                }`}
+              />
+            )}
+
+            {/* Monaco */}
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <div className="h-full w-full pr-1">
+                <MonacoEditorWrapper
+                  value={latexCode}
+                  onChange={handleEditorChange}
+                  onSelectionChange={setSelectionInfo}
+                  onEditorMount={handleEditorMount}
+                />
+              </div>
+            </div>
           </div>
         </div>
+
+        {/* Resize handle between editor + PDF */}
+        <div
+          onMouseDown={handleResizeMouseDown}
+          className={`flex-none w-1 cursor-col-resize bg-indigo-500/40 hover:bg-indigo-500/70 transition-colors ${
+            isResizing ? 'bg-indigo-500' : ''
+          }`}
+        />
 
         {/* Right column — PDF Preview */}
         <div className="flex-1 flex flex-col min-w-0">

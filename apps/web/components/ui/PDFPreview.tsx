@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo } from 'react';
-import { Loader2, FileText } from 'lucide-react';
+import { useMemo, useState, useCallback } from 'react';
+import { Loader2, FileText, ChevronLeft, ChevronRight } from 'lucide-react';
 
 // ─── LaTeX parser ─────────────────────────────────────────────────────────────
 
@@ -131,22 +131,95 @@ interface PDFPreviewProps {
 export function PDFPreview({ latexCode, isCompiling = false }: PDFPreviewProps) {
   const cv = useMemo(() => parseLatex(latexCode), [latexCode]);
 
+  const [zoom, setZoom] = useState(100);
+  const [page, setPage] = useState(1);
+  const totalPages = 1;
+
+  const handleZoomIn = useCallback(() => {
+    setZoom((z) => Math.min(200, z + 10));
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    setZoom((z) => Math.max(50, z - 10));
+  }, []);
+
+  const handlePrevPage = useCallback(() => {
+    setPage((p) => Math.max(1, p - 1));
+  }, []);
+
+  const handleNextPage = useCallback(() => {
+    setPage((p) => Math.min(totalPages, p + 1));
+  }, [totalPages]);
+
   return (
-    <div className="relative h-full w-full bg-[#e8eaed] flex flex-col overflow-hidden">
+    <div className="relative h-full w-full bg-[#020617] flex flex-col overflow-hidden">
       {/* Top chrome bar (mimics PDF viewer chrome) */}
-      <div className="shrink-0 flex items-center justify-between px-4 py-2 bg-[#d4d6d9] border-b border-black/10">
+      <div className="shrink-0 flex items-center justify-between px-4 py-2 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-slate-700/60 shadow-[0_8px_30px_rgba(15,23,42,0.6)]">
         <div className="flex items-center gap-2">
-          <FileText className="w-3.5 h-3.5 text-slate-500" strokeWidth={1.5} />
-          <span className="text-xs text-slate-500 font-medium">resume.pdf</span>
+          <div className="flex items-center justify-center w-6 h-6 rounded-full bg-indigo-500/20 border border-indigo-400/40">
+            <FileText className="w-3.5 h-3.5 text-indigo-200" strokeWidth={1.6} />
+          </div>
+          <span className="text-[11px] uppercase tracking-[0.16em] text-slate-300 font-semibold">
+            PDF Preview
+          </span>
         </div>
-        <span className="text-xs text-slate-400">Page 1 of 1</span>
+
+        <div className="flex items-center gap-4 text-xs text-slate-200">
+          {/* Zoom controls */}
+          <div className="flex items-center gap-1.5 rounded-full bg-slate-900/60 px-2 py-1 border border-slate-700/70 shadow-inner shadow-black/40">
+            <button
+              type="button"
+              onClick={handleZoomOut}
+              className="w-6 h-6 flex items-center justify-center rounded-full bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-100 border border-slate-600/70 transition-colors"
+            >
+              -
+            </button>
+            <span className="min-w-[38px] text-center text-[11px] font-medium text-slate-100">
+              {zoom}%
+            </span>
+            <button
+              type="button"
+              onClick={handleZoomIn}
+              className="w-6 h-6 flex items-center justify-center rounded-full bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-100 border border-slate-600/70 transition-colors"
+            >
+              +
+            </button>
+          </div>
+
+          {/* Page navigation */}
+          <div className="flex items-center gap-1.5 rounded-full bg-slate-900/60 px-2 py-1 border border-slate-700/70 shadow-inner shadow-black/40">
+            <button
+              type="button"
+              onClick={handlePrevPage}
+              disabled={page <= 1}
+              className="w-6 h-6 flex items-center justify-center rounded-full bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed border border-slate-600/70 transition-colors"
+            >
+              <ChevronLeft className="w-3 h-3 text-slate-100" />
+            </button>
+            <span className="min-w-[52px] text-center text-[11px] font-medium text-slate-100">
+              {page} / {totalPages}
+            </span>
+            <button
+              type="button"
+              onClick={handleNextPage}
+              disabled={page >= totalPages}
+              className="w-6 h-6 flex items-center justify-center rounded-full bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed border border-slate-600/70 transition-colors"
+            >
+              <ChevronRight className="w-3 h-3 text-slate-100" />
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Scrollable paper area */}
-      <div className="flex-1 overflow-y-auto py-8 px-6 flex justify-center">
+      <div className="flex-1 overflow-y-auto py-4 px-4 flex justify-center items-start">
         <div
-          className="relative bg-white shadow-[0_4px_40px_rgba(0,0,0,0.18)] w-full max-w-[680px] min-h-[900px]"
-          style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}
+          className="relative bg-white shadow-[0_18px_60px_rgba(15,23,42,0.9)] rounded-md w-[720px] max-w-full min-h-[900px] mx-auto"
+          style={{
+            fontFamily: 'Georgia, "Times New Roman", serif',
+            transform: `scale(${zoom / 100})`,
+            transformOrigin: 'top center',
+          }}
         >
           {/* Compile overlay */}
           {isCompiling && (
@@ -158,7 +231,7 @@ export function PDFPreview({ latexCode, isCompiling = false }: PDFPreviewProps) 
             </div>
           )}
 
-          <div className="px-10 py-10 text-[11px] leading-[1.5] text-[#111]">
+          <div className="px-8 py-8 text-[11px] leading-[1.5] text-[#111]">
 
             {/* ── Header ──────────────────────────────────────────────────── */}
             <div className="text-center mb-4 pb-4 border-b-2 border-[#1d4ed8]">
