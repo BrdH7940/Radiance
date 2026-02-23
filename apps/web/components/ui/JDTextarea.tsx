@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
+import type React from 'react'
 import { FileSearch } from 'lucide-react'
 import { useCVStore } from '@/store/useCVStore'
 
@@ -17,6 +18,57 @@ Requirements:
 
 export function JDTextarea() {
     const { jdText, setJdText } = useCVStore()
+
+    const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+        const html = e.clipboardData.getData('text/html')
+
+        // If there is no HTML (plain-text copy), let the browser handle it.
+        if (!html) return
+
+        const doc = new DOMParser().parseFromString(html, 'text/html')
+        const blocks = Array.from(
+            doc.body.querySelectorAll<HTMLElement>(
+                'li, p, h1, h2, h3, h4, h5, h6'
+            )
+        )
+
+        // If there is no recognizable structure, fall back to default paste behavior.
+        if (blocks.length === 0) return
+
+        e.preventDefault()
+
+        const lines: string[] = []
+
+        for (const el of blocks) {
+            const text = el.textContent?.trim()
+            if (!text) continue
+
+            if (el.tagName === 'LI') {
+                lines.push(`• ${text}`)
+            } else {
+                lines.push('\n' + text)
+            }
+        }
+
+        const textToInsert = lines.join('\n')?.trim()
+
+        const target = e.target as HTMLTextAreaElement
+        const { selectionStart, selectionEnd, value } = target
+
+        const newValue =
+            value.slice(0, selectionStart) +
+            textToInsert +
+            value.slice(selectionEnd)
+
+        setJdText(newValue)
+
+        const cursorPos = selectionStart + textToInsert.length
+
+        requestAnimationFrame(() => {
+            target.selectionStart = cursorPos
+            target.selectionEnd = cursorPos
+        })
+    }
 
     const wordCount = useMemo(() => {
         if (!jdText.trim()) return 0
@@ -61,6 +113,7 @@ export function JDTextarea() {
                 {/* Text area */}
                 <textarea
                     value={jdText}
+                    onPaste={handlePaste}
                     onChange={(e) => setJdText(e.target.value)}
                     placeholder={PLACEHOLDER}
                     className="
