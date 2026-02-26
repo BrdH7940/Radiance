@@ -59,16 +59,62 @@ class IStorageService(ABC):
 
     @abstractmethod
     def generate_presigned_upload_url(self, object_key: str, content_type: str) -> str:
-        """Generate a time-limited URL that allows the client to upload an object.
+        """Generate a time-limited URL for uploading an object via HTTP PUT.
 
         Args:
-            object_key: The fully-qualified object key inside the bucket (e.g. ``raw-pdf/uuid.pdf``).
-            content_type: MIME type of the file that will be uploaded.
+            object_key: Fully-qualified object key inside the bucket.
+            content_type: MIME type of the file to be uploaded.
 
         Returns:
-            A pre-signed HTTPS URL that can be used with HTTP PUT to upload the object.
+            A presigned HTTPS URL that accepts HTTP PUT requests.
+        """
+        ...
+
+    @abstractmethod
+    def download_object(self, object_key: str, local_path: str) -> None:
+        """Download an object from storage to a local file.
+
+        Args:
+            object_key: Fully-qualified key of the object to download.
+            local_path: Absolute local filesystem path to write the file to.
+
+        Raises:
+            FileNotFoundError: If the object does not exist in the bucket.
+        """
+        ...
+
+    @abstractmethod
+    def upload_file(
+        self,
+        local_path: str,
+        object_key: str,
+        content_type: str = "application/octet-stream",
+    ) -> str:
+        """Upload a local file to object storage.
+
+        Args:
+            local_path: Absolute path to the file to upload.
+            object_key: Destination key in the bucket.
+            content_type: MIME type of the uploaded file.
+
+        Returns:
+            The object_key of the uploaded object (for chaining).
+        """
+        ...
+
+    @abstractmethod
+    def generate_presigned_download_url(self, object_key: str) -> str:
+        """Generate a time-limited URL for downloading an object.
+
+        Args:
+            object_key: Fully-qualified key of the object.
+
+        Returns:
+            A presigned HTTPS URL that allows HTTP GET access to the object.
         """
         ...
 
 
+# Sentinel prefixes — referenced in both adapters and use cases.
 RAW_PDF_PREFIX: Final[str] = "raw-pdf/"
+ENHANCED_PDF_PREFIX: Final[str] = "enhanced-pdf/"

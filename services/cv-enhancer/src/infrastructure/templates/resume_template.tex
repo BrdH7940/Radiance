@@ -1,0 +1,43 @@
+% ──────────────────────────────────────────────────────────────────────────────
+% Radiance CV Template — Jinja2 managed (delimiters: << >> for vars, <% %> for blocks)
+% ──────────────────────────────────────────────────────────────────────────────
+\documentclass[10pt,a4paper]{article}
+
+% ── Encoding & fonts ──────────────────────────────────────────────────────────
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+
+% ── Page geometry ─────────────────────────────────────────────────────────────
+\usepackage[top=0.6in, bottom=0.6in, left=0.7in, right=0.7in]{geometry}
+
+% ── Hyperlinks ────────────────────────────────────────────────────────────────
+\usepackage[hidelinks,colorlinks=false]{hyperref}
+
+% ── List configuration ────────────────────────────────────────────────────────
+\usepackage{enumitem}
+
+% ── Section heading formatting ────────────────────────────────────────────────
+\usepackage{titlesec}
+\titleformat{\section}
+  {\large\bfseries}{}{0em}{}[\vspace{-4pt}\rule{\linewidth}{0.4pt}\vspace{2pt}]
+\titlespacing*{\section}{0pt}{8pt}{4pt}
+
+\titleformat{\subsection}
+  {\normalsize\bfseries}{}{0em}{}
+\titlespacing*{\subsection}{0pt}{4pt}{2pt}
+
+% ── Paragraph spacing ─────────────────────────────────────────────────────────
+\usepackage{parskip}
+\setlength{\parskip}{3pt}
+\setlength{\parindent}{0pt}
+
+% ── Suppress page numbers ─────────────────────────────────────────────────────
+\pagestyle{empty}
+
+% ──────────────────────────────────────────────────────────────────────────────
+\begin{document}
+
+<< body >>
+
+\end{document}
