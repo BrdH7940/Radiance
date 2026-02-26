@@ -10,7 +10,8 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from presentation.api import router
+from presentation.api import router as cv_router
+from presentation.resumes import router as resumes_router
 
 # ---------------------------------------------------------------------------
 # Logging configuration
@@ -68,7 +69,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(router)
+app.include_router(cv_router)
+app.include_router(resumes_router)
 
 
 # ---------------------------------------------------------------------------
