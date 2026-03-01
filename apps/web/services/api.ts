@@ -1,5 +1,70 @@
-import { MOCK_LATEX_CODE, LOADING_STEPS } from './mockData';
+/**
+ * API services and types aligned with the FastAPI backend.
+ *
+ * - AnalysisService: upload URL, S3 upload, trigger analysis, poll job status.
+ * - Legacy/workspace: uploadAndAnalyze (orchestrated async), aiEditSelectedText.
+ */
 
+const API_BASE =
+  typeof process !== 'undefined' && process.env.NEXT_PUBLIC_API_URL
+    ? process.env.NEXT_PUBLIC_API_URL
+    : 'http://localhost:8000';
+
+// ─── Response types (backend contract) ───────────────────────────────────────
+
+/** POST /api/v1/resumes/upload-urls */
+export interface ResumeUploadUrlRequest {
+  file_name: string;
+  content_type: string;
+}
+
+export interface ResumeUploadUrlResponse {
+  upload_url: string;
+  s3_key: string;
+  bucket: string;
+}
+
+/** POST /api/v1/analyses */
+export interface CreateAnalysisRequest {
+  s3_key: string;
+  jd_text: string;
+}
+
+export type JobStatus = 'queued' | 'processing' | 'completed' | 'failed';
+
+export interface CreateAnalysisResponse {
+  id: string;
+  status: JobStatus;
+}
+
+/** GET /api/v1/analyses/{id} */
+export interface SkillGapDTO {
+  skill: string;
+  importance: string;
+}
+
+export interface RedFlagDTO {
+  title: string;
+  description: string;
+  severity: string;
+}
+
+export interface AnalysisResultDTO {
+  matching_score: number;
+  missing_skills: SkillGapDTO[];
+  red_flags: RedFlagDTO[];
+  latex_code: string;
+  pdf_url: string;
+}
+
+export interface AnalysisStatusResponse {
+  id: string;
+  status: JobStatus;
+  error: string | null;
+  result: AnalysisResultDTO | null;
+}
+
+/** Legacy / workspace types */
 export interface AnalyzeResult {
   latexCode: string;
   pdfUrl: string;
@@ -9,65 +74,203 @@ export interface AIEditResult {
   newText: string;
 }
 
-/**
- * Simulates uploading a CV and JD to the backend for analysis.
- * Steps through multiple loading phases before resolving.
- */
-export async function uploadAndAnalyze(
-  _cv: File,
-  _jd: string,
-  onStep?: (stepIndex: number) => void,
-): Promise<AnalyzeResult> {
-  for (let i = 0; i < LOADING_STEPS.length; i++) {
-    onStep?.(i);
-    await delay(LOADING_STEPS[i].duration);
-  }
+// ─── AnalysisService ─────────────────────────────────────────────────────────
 
-  return {
-    latexCode: MOCK_LATEX_CODE,
-    pdfUrl: '/sample.pdf',
-  };
+async function getJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(init?.headers as Record<string, string>),
+    },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`API ${res.status}: ${text || res.statusText}`);
+  }
+  return res.json() as Promise<T>;
 }
 
+export const AnalysisService = {
+  /** Get a presigned URL for uploading the resume PDF to S3. */
+  async getUploadUrl(
+    fileName: string,
+    contentType: string
+  ): Promise<ResumeUploadUrlResponse> {
+    return getJson<ResumeUploadUrlResponse>(
+      `${API_BASE}/api/v1/resumes/upload-urls`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ file_name: fileName, content_type: contentType }),
+      }
+    );
+  },
+
+  /** Upload the file directly to S3 using the presigned PUT URL. */
+  async uploadToS3(file: File, uploadUrl: string): Promise<void> {
+    const res = await fetch(uploadUrl, {
+      method: 'PUT',
+      body: file,
+      headers: {
+        'Content-Type': file.type,
+      },
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`S3 upload failed: ${res.status} ${text || res.statusText}`);
+    }
+  },
+
+  /** Start the async analysis job; returns job id and initial status. */
+  async triggerAnalysis(
+    s3Key: string,
+    jdText: string
+  ): Promise<CreateAnalysisResponse> {
+    return getJson<CreateAnalysisResponse>(`${API_BASE}/api/v1/analyses`, {
+      method: 'POST',
+      body: JSON.stringify({ s3_key: s3Key, jd_text: jdText }),
+    });
+  },
+
+  /** Poll the current status of an analysis job. */
+  async pollJobStatus(jobId: string): Promise<AnalysisStatusResponse> {
+    return getJson<AnalysisStatusResponse>(
+      `${API_BASE}/api/v1/analyses/${jobId}`
+    );
+  },
+};
+
+// ─── Async upload + analyze (orchestrated flow) ──────────────────────────────
+
+export type OnStepCallback = (stepIndex: number) => void;
+
+export interface UploadAndAnalyzeResult {
+  jobId: string;
+  status: JobStatus;
+  result: AnalysisResultDTO | null;
+  error: string | null;
+}
+
+const POLL_INTERVAL_MS = 2000;
+const MAX_POLL_ATTEMPTS = 300; // ~10 min
+
 /**
- * Simulates an AI rewrite of the selected text using the given prompt.
+ * Orchestrates: get upload URL -> upload file to S3 -> trigger analysis -> poll until completed/failed.
+ * Updates loading step index via onStep. Does not throw on job failure; returns { status: 'failed', error }.
+ */
+export async function uploadAndAnalyze(
+  cvFile: File,
+  jdText: string,
+  onStep?: OnStepCallback
+): Promise<UploadAndAnalyzeResult> {
+  onStep?.(0);
+
+  const { upload_url, s3_key } = await AnalysisService.getUploadUrl(
+    cvFile.name,
+    cvFile.type || 'application/pdf'
+  );
+  onStep?.(1);
+
+  await AnalysisService.uploadToS3(cvFile, upload_url);
+  onStep?.(2);
+
+  const { id: jobId, status: initialStatus } =
+    await AnalysisService.triggerAnalysis(s3_key, jdText.trim());
+  onStep?.(3);
+
+  let attempts = 0;
+  return new Promise((resolve) => {
+    const intervalId = setInterval(async () => {
+      attempts++;
+      if (attempts > MAX_POLL_ATTEMPTS) {
+        clearInterval(intervalId);
+        resolve({
+          jobId,
+          status: 'failed',
+          result: null,
+          error: 'Analysis timed out. Please try again.',
+        });
+        return;
+      }
+
+      try {
+        const statusResponse = await AnalysisService.pollJobStatus(jobId);
+        onStep?.(4);
+
+        if (statusResponse.status === 'completed' && statusResponse.result) {
+          clearInterval(intervalId);
+          resolve({
+            jobId,
+            status: 'completed',
+            result: statusResponse.result,
+            error: null,
+          });
+          return;
+        }
+
+        if (statusResponse.status === 'failed') {
+          clearInterval(intervalId);
+          resolve({
+            jobId,
+            status: 'failed',
+            result: null,
+            error: statusResponse.error || 'Analysis failed.',
+          });
+        }
+      } catch (err) {
+        clearInterval(intervalId);
+        resolve({
+          jobId,
+          status: 'failed',
+          result: null,
+          error: err instanceof Error ? err.message : 'Polling failed.',
+        });
+      }
+    }, POLL_INTERVAL_MS);
+  });
+}
+
+// ─── Workspace / editor APIs ──────────────────────────────────────────────────
+
+/**
+ * AI rewrite of selected LaTeX text (POST /api/v1/editor/refinements).
+ * Stub until Phase 4; can remain mock for now.
  */
 export async function aiEditSelectedText(
   selectedText: string,
-  prompt: string,
+  prompt: string
 ): Promise<AIEditResult> {
-  await delay(1400);
+  const res = await fetch(`${API_BASE}/api/v1/editor/refinements`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ selected_text: selectedText, prompt }),
+  }).catch(() => null);
 
-  const rewritten = buildMockRewrite(selectedText, prompt);
-  return { newText: rewritten };
-}
+  if (res?.ok) {
+    const data = (await res.json()) as { new_text: string };
+    return { newText: data.new_text };
+  }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function buildMockRewrite(text: string, prompt: string): string {
+  // Fallback mock when backend not implemented
+  await new Promise((r) => setTimeout(r, 600));
   const lower = prompt.toLowerCase();
-
   if (lower.includes('star')) {
-    return (
-      text.trim() +
-      ' (Situation: identified the challenge; Task: defined the objective; ' +
-      'Action: implemented the solution; Result: achieved measurable impact.)'
-    );
+    return {
+      newText:
+        selectedText.trim() +
+        ' (Situation: …; Task: …; Action: …; Result: measurable impact.)',
+    };
   }
-
-  if (lower.includes('quantif') || lower.includes('metric') || lower.includes('number')) {
-    return text.trim().replace(/\.$/, '') + ', achieving a 35% improvement in key metrics.';
+  if (
+    lower.includes('quantif') ||
+    lower.includes('metric') ||
+    lower.includes('number')
+  ) {
+    return {
+      newText:
+        selectedText.trim().replace(/\.$/, '') +
+        ', achieving a 35% improvement in key metrics.',
+    };
   }
-
-  if (lower.includes('concis') || lower.includes('shorter') || lower.includes('brief')) {
-    const words = text.trim().split(' ');
-    return words.slice(0, Math.max(8, Math.floor(words.length * 0.6))).join(' ') + '.';
-  }
-
-  // Generic rewrite fallback
-  return `[AI-Enhanced] ${text.trim()}`;
+  return { newText: `[AI-Enhanced] ${selectedText.trim()}` };
 }

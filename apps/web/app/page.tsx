@@ -10,6 +10,8 @@ import { AnalyzingOverlay } from '@/components/ui/AnalyzingOverlay'
 import { useCVStore } from '@/store/useCVStore'
 import { uploadAndAnalyze } from '@/services/api'
 
+const MIN_JD_LENGTH = 50
+
 export default function UploadPage() {
     const router = useRouter()
     const {
@@ -18,22 +20,22 @@ export default function UploadPage() {
         phase,
         setPhase,
         setLoadingStepIndex,
-        setLatexCode,
-        setPdfUrl,
+        setJobId,
+        setAnalysisResult,
     } = useCVStore()
 
     const [validationError, setValidationError] = useState<string | null>(null)
 
-    const canAnalyze = !!cvFile && jdText.trim().length > 10
+    const canAnalyze = !!cvFile && jdText.trim().length >= MIN_JD_LENGTH
 
     const handleAnalyze = useCallback(async () => {
         if (!cvFile) {
             setValidationError('Please upload your CV (PDF) first.')
             return
         }
-        if (jdText.trim().length < 10) {
+        if (jdText.trim().length < MIN_JD_LENGTH) {
             setValidationError(
-                'Please paste a job description (at least a few words).'
+                'Please paste a job description (at least 50 characters).'
             )
             return
         }
@@ -41,31 +43,29 @@ export default function UploadPage() {
         setValidationError(null)
         setPhase('analyzing')
 
-        try {
-            const result = await uploadAndAnalyze(
-                cvFile,
-                jdText,
-                (stepIndex) => {
-                    setLoadingStepIndex(stepIndex)
-                }
-            )
+        const result = await uploadAndAnalyze(
+            cvFile,
+            jdText,
+            (stepIndex) => setLoadingStepIndex(stepIndex)
+        )
 
-            setLatexCode(result.latexCode)
-            setPdfUrl(result.pdfUrl)
-            setPhase('workspace')
-            router.push('/workspace')
-        } catch {
+        if (result.status === 'completed' && result.result) {
+            setJobId(result.jobId)
+            setAnalysisResult(result.result)
+            setPhase('dashboard')
+            router.push('/dashboard')
+        } else {
             setPhase('upload')
-            setValidationError('Something went wrong. Please try again.')
+            setValidationError(result.error ?? 'Something went wrong. Please try again.')
         }
     }, [
         cvFile,
         jdText,
         router,
-        setLatexCode,
-        setLoadingStepIndex,
         setPhase,
-        setPdfUrl,
+        setLoadingStepIndex,
+        setJobId,
+        setAnalysisResult,
     ])
 
     const isAnalyzing = phase === 'analyzing'
@@ -173,10 +173,10 @@ export default function UploadPage() {
                     {!canAnalyze && (
                         <p className="text-center text-slate-700 text-xs mt-4 animate-in fade-in duration-500">
                             {!cvFile && !jdText.trim()
-                                ? 'Upload your CV and paste a JD to continue.'
+                                ? 'Upload your CV and paste a JD (50+ characters) to continue.'
                                 : !cvFile
                                   ? 'Upload your CV (PDF) to continue.'
-                                  : 'Paste a job description to continue.'}
+                                  : 'Paste a job description (at least 50 characters) to continue.'}
                         </p>
                     )}
                 </main>

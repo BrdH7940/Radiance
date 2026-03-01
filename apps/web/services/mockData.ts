@@ -86,10 +86,11 @@ developer experience and open-source contributions.
 \\end{document}
 `;
 
+/** Steps shown during async upload + analysis (index 0–4). */
 export const LOADING_STEPS = [
-  { id: 1, label: 'Parsing PDF document…',         duration: 900  },
-  { id: 2, label: 'Extracting CV structure…',       duration: 700  },
-  { id: 3, label: 'Analyzing Job Description…',     duration: 800  },
-  { id: 4, label: 'Detecting skill gaps…',           duration: 700  },
-  { id: 5, label: 'Generating enhanced LaTeX…',     duration: 900  },
+  { id: 1, label: 'Preparing upload…', duration: 0 },
+  { id: 2, label: 'Uploading CV to storage…', duration: 0 },
+  { id: 3, label: 'Starting analysis…', duration: 0 },
+  { id: 4, label: 'Analyzing CV & job description…', duration: 0 },
+  { id: 5, label: 'Generating enhanced CV…', duration: 0 },
 ];

@@ -1,16 +1,24 @@
 import { create } from 'zustand';
 import { LOADING_STEPS } from '@/services/mockData';
+import type { AnalysisResultDTO } from '@/services/api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type AppPhase = 'upload' | 'analyzing' | 'workspace';
+export type AppPhase = 'upload' | 'analyzing' | 'dashboard' | 'workspace';
+
+/** Analysis result shown on the dashboard; matches backend AnalysisResultDTO. */
+export type AnalysisResultState = AnalysisResultDTO;
 
 export interface CVStore {
   // Input data
   cvFile: File | null;
   jdText: string;
 
-  // Workspace data
+  // Async job
+  jobId: string | null;
+  analysisResult: AnalysisResultState | null;
+
+  // Workspace data (populated when entering workspace from dashboard)
   latexCode: string;
   pdfUrl: string;
 
@@ -22,6 +30,8 @@ export interface CVStore {
   // Actions
   setCvFile: (file: File | null) => void;
   setJdText: (text: string) => void;
+  setJobId: (id: string | null) => void;
+  setAnalysisResult: (result: AnalysisResultState | null) => void;
   setLatexCode: (code: string) => void;
   setPdfUrl: (url: string) => void;
   setPhase: (phase: AppPhase) => void;
@@ -34,6 +44,8 @@ export interface CVStore {
 const initialState = {
   cvFile: null,
   jdText: '',
+  jobId: null,
+  analysisResult: null,
   latexCode: '',
   pdfUrl: '',
   phase: 'upload' as AppPhase,
@@ -48,6 +60,8 @@ export const useCVStore = create<CVStore>((set) => ({
 
   setCvFile: (file) => set({ cvFile: file }),
   setJdText: (text) => set({ jdText: text }),
+  setJobId: (id) => set({ jobId: id }),
+  setAnalysisResult: (result) => set({ analysisResult: result }),
   setLatexCode: (code) => set({ latexCode: code }),
   setPdfUrl: (url) => set({ pdfUrl: url }),
   setPhase: (phase) => set({ phase }),
