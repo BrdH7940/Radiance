@@ -94,8 +94,8 @@ export function FloatingAIMenu({
       try {
         const { newText } = await aiEdit(selectionInfo.selectedText, trimmed);
         onApply(newText, selectionInfo.monacoSelection);
-      } catch {
-        setError('AI request failed — please try again.');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'AI request failed — please try again.');
       } finally {
         setIsLoading(false);
       }

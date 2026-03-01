@@ -234,7 +234,7 @@ export async function uploadAndAnalyze(
 
 /**
  * AI rewrite of selected LaTeX text (POST /api/v1/editor/refinements).
- * Stub until Phase 4; can remain mock for now.
+ * Replaces the selection with the refined LaTeX snippet.
  */
 export async function aiEditSelectedText(
   selectedText: string,
@@ -244,33 +244,39 @@ export async function aiEditSelectedText(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ selected_text: selectedText, prompt }),
-  }).catch(() => null);
+  });
 
-  if (res?.ok) {
-    const data = (await res.json()) as { new_text: string };
-    return { newText: data.new_text };
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(body || `Refinement failed (${res.status})`);
   }
 
-  // Fallback mock when backend not implemented
-  await new Promise((r) => setTimeout(r, 600));
-  const lower = prompt.toLowerCase();
-  if (lower.includes('star')) {
-    return {
-      newText:
-        selectedText.trim() +
-        ' (Situation: …; Task: …; Action: …; Result: measurable impact.)',
-    };
+  const data = (await res.json()) as { new_text: string };
+  return { newText: data.new_text };
+}
+
+/** Response from POST /api/v1/editor/renders */
+export interface EditorRenderResponse {
+  pdf_url: string;
+  success: boolean;
+  error?: string | null;
+}
+
+/**
+ * Compile LaTeX to PDF and get a presigned URL (POST /api/v1/editor/renders).
+ */
+export async function compileLaTeXToPdf(
+  latexCode: string
+): Promise<EditorRenderResponse> {
+  const res = await fetch(`${API_BASE}/api/v1/editor/renders`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ latex_code: latexCode }),
+  });
+
+  const data = (await res.json()) as EditorRenderResponse;
+  if (!res.ok) {
+    throw new Error(data.error || `Render failed (${res.status})`);
   }
-  if (
-    lower.includes('quantif') ||
-    lower.includes('metric') ||
-    lower.includes('number')
-  ) {
-    return {
-      newText:
-        selectedText.trim().replace(/\.$/, '') +
-        ', achieving a 35% improvement in key metrics.',
-    };
-  }
-  return { newText: `[AI-Enhanced] ${selectedText.trim()}` };
+  return data;
 }

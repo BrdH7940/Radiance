@@ -141,16 +141,20 @@ interface PdfTextClickInfo {
 
 interface PDFPreviewProps {
     latexCode: string
+    /** When set, the compiled PDF is shown in an iframe instead of parsed LaTeX. */
+    pdfUrl?: string
     isCompiling?: boolean
     onTextDoubleClick?: (info: PdfTextClickInfo) => void
 }
 
 export function PDFPreview({
     latexCode,
+    pdfUrl,
     isCompiling = false,
     onTextDoubleClick,
 }: PDFPreviewProps) {
     const cv = useMemo(() => parseLatex(latexCode), [latexCode])
+    const showPdfFrame = Boolean(pdfUrl && !isCompiling)
 
     const [zoom, setZoom] = useState(100)
     const [page, setPage] = useState(1)
@@ -259,7 +263,16 @@ export function PDFPreview({
             </div>
 
             {/* Scrollable paper area */}
-            <div className="flex-1 overflow-y-auto py-4 px-4 flex justify-center items-start">
+            <div className="flex-1 overflow-y-auto py-4 px-4 flex justify-center items-start min-h-0">
+                {showPdfFrame ? (
+                    <div className="relative w-full h-full min-h-[600px] rounded-md overflow-hidden bg-slate-900">
+                        <iframe
+                            src={pdfUrl}
+                            title="Compiled PDF"
+                            className="w-full h-full min-h-[600px] border-0"
+                        />
+                    </div>
+                ) : (
                 <div
                     className="relative bg-white shadow-[0_18px_60px_rgba(15,23,42,0.9)] rounded-md w-[720px] max-w-full min-h-[900px] mx-auto"
                     style={{
@@ -394,6 +407,7 @@ export function PDFPreview({
                         ))}
                     </div>
                 </div>
+                )}
             </div>
         </div>
     )

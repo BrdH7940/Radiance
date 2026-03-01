@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from presentation.analyses import router as analyses_router
 from presentation.api import router as cv_router
+from presentation.editor import router as editor_router
 from presentation.resumes import router as resumes_router
 
 # ---------------------------------------------------------------------------
@@ -38,6 +39,7 @@ async def lifespan(app: FastAPI):
     # rather than on the first request.
     from container import (
         get_analyze_cv_use_case,
+        get_editor_ai_service,
         get_enhance_cv_use_case,
         get_job_repository,
         get_latex_compiler,
@@ -48,6 +50,7 @@ async def lifespan(app: FastAPI):
     get_storage_service()       # S3 adapter
     get_latex_compiler()        # Jinja2 + pdflatex
     get_job_repository()        # in-memory store
+    get_editor_ai_service()     # editor refinements
     get_analyze_cv_use_case()   # new async pipeline
 
     logger.info("All dependencies initialised. Service is ready to accept requests.")
@@ -85,6 +88,7 @@ app.add_middleware(
 app.include_router(cv_router)        # POST /api/v1/cv/enhance  (legacy)
 app.include_router(resumes_router)   # POST /api/v1/resumes/upload-urls
 app.include_router(analyses_router)  # POST /api/v1/analyses  |  GET /api/v1/analyses/{id}
+app.include_router(editor_router)    # POST /api/v1/editor/refinements  |  /renders
 
 
 # ---------------------------------------------------------------------------

@@ -28,11 +28,13 @@ from pathlib import Path
 
 from application.use_cases.enhance_cv_use_case import EnhanceCVUseCase
 from config import AppSettings, get_settings
+from core.ports.editor_ai_port import IEditorAIService
 from core.ports.job_repository_port import IJobRepository
 from core.ports.latex_compiler_port import ILaTeXCompilerService
 from core.ports.llm_port import ILLMService
 from core.use_cases.analyze_cv_use_case import AnalyzeCVUseCase
 from domain.ports import IStorageService
+from infrastructure.adapters.editor_ai_gemini_adapter import EditorAIGeminiAdapter
 from infrastructure.adapters.gemini_llm_adapter import GeminiLLMAdapter
 from infrastructure.adapters.in_memory_job_repository import InMemoryJobRepository
 from infrastructure.adapters.latex_compiler_adapter import LocalLaTeXCompiler
@@ -127,6 +129,19 @@ def get_latex_compiler() -> ILaTeXCompilerService:
         "Initialising LocalLaTeXCompiler (templates: '%s')…", _TEMPLATES_DIR
     )
     return LocalLaTeXCompiler(template_dir=_TEMPLATES_DIR)
+
+
+@lru_cache(maxsize=1)
+def get_editor_ai_service() -> IEditorAIService:
+    """Singleton EditorAIGeminiAdapter for LaTeX snippet refinement."""
+    settings: AppSettings = get_settings()
+    logger.info(
+        "Initialising EditorAIGeminiAdapter (model: '%s')…", settings.gemini_model
+    )
+    return EditorAIGeminiAdapter(
+        api_key=settings.google_api_key,
+        model=settings.gemini_model,
+    )
 
 
 @lru_cache(maxsize=1)

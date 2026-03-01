@@ -19,7 +19,7 @@ import { MonacoEditorWrapper } from '@/components/editor/MonacoEditorWrapper'
 import { FloatingAIMenu } from '@/components/editor/FloatingAIMenu'
 import { PDFPreview } from '@/components/ui/PDFPreview'
 import { useCVStore } from '@/store/useCVStore'
-import { aiEditSelectedText } from '@/services/api'
+import { aiEditSelectedText, compileLaTeXToPdf } from '@/services/api'
 import type { SelectionInfo } from '@/components/editor/MonacoEditorWrapper'
 
 // ─── Notification ─────────────────────────────────────────────────────────────
@@ -49,7 +49,7 @@ interface TexSection {
 
 export default function WorkspacePage() {
     const router = useRouter()
-    const { latexCode, setLatexCode } = useCVStore()
+    const { latexCode, setLatexCode, pdfUrl, setPdfUrl } = useCVStore()
 
     // Local UI state
     const [selectionInfo, setSelectionInfo] = useState<SelectionInfo | null>(
@@ -322,10 +322,23 @@ export default function WorkspacePage() {
     const handleCompile = useCallback(async () => {
         if (isCompiling) return
         setIsCompiling(true)
-        await new Promise((r) => setTimeout(r, 1600))
-        setIsCompiling(false)
-        showNotification('PDF compiled successfully.', 'success')
-    }, [isCompiling, showNotification])
+        try {
+            const data = await compileLaTeXToPdf(latexCode)
+            if (data.success && data.pdf_url) {
+                setPdfUrl(data.pdf_url)
+                showNotification('PDF compiled successfully.', 'success')
+            } else {
+                showNotification(data.error ?? 'Compilation failed.', 'error')
+            }
+        } catch (err) {
+            showNotification(
+                err instanceof Error ? err.message : 'Compilation failed.',
+                'error'
+            )
+        } finally {
+            setIsCompiling(false)
+        }
+    }, [isCompiling, latexCode, setPdfUrl, showNotification])
 
     const handleDownloadTex = useCallback(() => {
         const blob = new Blob([latexCode], { type: 'text/plain' })
@@ -339,11 +352,21 @@ export default function WorkspacePage() {
     }, [latexCode, showNotification])
 
     const handleDownloadPDF = useCallback(() => {
-        showNotification(
-            'PDF export requires the LaTeX compiler backend.',
-            'error'
-        )
-    }, [showNotification])
+        if (pdfUrl) {
+            const a = document.createElement('a')
+            a.href = pdfUrl
+            a.download = 'resume.pdf'
+            a.target = '_blank'
+            a.rel = 'noopener noreferrer'
+            a.click()
+            showNotification('PDF download started.', 'info')
+        } else {
+            showNotification(
+                'Compile the PDF first using the "Compile PDF" button.',
+                'error'
+            )
+        }
+    }, [pdfUrl, showNotification])
 
     // ── Render ────────────────────────────────────────────────────────────────
 
@@ -591,6 +614,7 @@ export default function WorkspacePage() {
                 <div className="flex-1 flex flex-col min-w-0">
                     <PDFPreview
                         latexCode={latexCode}
+                        pdfUrl={pdfUrl}
                         isCompiling={isCompiling}
                         onTextDoubleClick={({ word }) => {
                             const trimmedWord = word.trim()
