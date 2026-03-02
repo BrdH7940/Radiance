@@ -11,7 +11,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from presentation.analyses import router as analyses_router
-from presentation.api import router as cv_router
 from presentation.editor import router as editor_router
 from presentation.resumes import router as resumes_router
 
@@ -40,13 +39,11 @@ async def lifespan(app: FastAPI):
     from container import (
         get_analyze_cv_use_case,
         get_editor_ai_service,
-        get_enhance_cv_use_case,
         get_job_repository,
         get_latex_compiler,
         get_storage_service,
     )
 
-    get_enhance_cv_use_case()   # legacy pipeline
     get_storage_service()       # S3 adapter
     get_latex_compiler()        # Jinja2 + pdflatex
     get_job_repository()        # in-memory store
@@ -69,8 +66,8 @@ app = FastAPI(
         "Parses a candidate's CV (PDF), compares it to a Job Description, "
         "calculates an ATS matching score, identifies skill gaps and red flags, "
         "and rewrites the experience section using the STAR method — "
-        "powered by Gemini 1.5 Flash via LangGraph. "
-        "Supports both synchronous (legacy) and asynchronous (polling) workflows."
+        "powered by Gemini 1.5 Flash. "
+        "Upload CV to S3, trigger analysis, then poll for results (async workflow)."
     ),
     version="2.0.0",
     lifespan=lifespan,
@@ -85,7 +82,6 @@ app.add_middleware(
 )
 
 # ── Routers ──────────────────────────────────────────────────────────────────
-app.include_router(cv_router)        # POST /api/v1/cv/enhance  (legacy)
 app.include_router(resumes_router)   # POST /api/v1/resumes/upload-urls
 app.include_router(analyses_router)  # POST /api/v1/analyses  |  GET /api/v1/analyses/{id}
 app.include_router(editor_router)    # POST /api/v1/editor/refinements  |  /renders

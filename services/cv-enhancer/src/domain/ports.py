@@ -3,9 +3,6 @@ Abstract interfaces for the CV Enhancer service.
 """
 
 from abc import ABC, abstractmethod
-from typing import Final
-
-from domain.models import AnalysisReport
 
 
 class IDocumentParser(ABC):
@@ -27,26 +24,6 @@ class IDocumentParser(ABC):
         Raises:
             FileNotFoundError: If no file exists at the given path.
             ValueError: If the file cannot be processed as a PDF.
-        """
-        ...
-
-
-class ICVEnhancerAgent(ABC):
-    """Interface for the CV Enhancer Agent.
-    
-    Example: OpenAI, Gemini, etc.
-    """
-
-    @abstractmethod
-    async def analyze_and_enhance(self, cv_text: str, jd_text: str) -> AnalysisReport:
-        """Analyse a CV against a Job Description and produce an enhanced version.
-
-        Args:
-            cv_text: Parsed CV content (Markdown or plain text).
-            jd_text: Full text of the target Job Description.
-
-        Returns:
-            An AnalysisReport with the matching score, skill gaps, and enhanced CV.
         """
         ...
 
@@ -113,8 +90,3 @@ class IStorageService(ABC):
             A presigned HTTPS URL that allows HTTP GET access to the object.
         """
         ...
-
-
-# Sentinel prefixes — referenced in both adapters and use cases.
-RAW_PDF_PREFIX: Final[str] = "raw-pdf/"
-ENHANCED_PDF_PREFIX: Final[str] = "enhanced-pdf/"

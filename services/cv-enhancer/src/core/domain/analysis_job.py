@@ -1,8 +1,7 @@
 """
 Domain models for asynchronous CV analysis jobs.
 
-These are the canonical data structures for the new async pipeline. They are
-intentionally decoupled from the legacy EnhanceCVUseCase domain models.
+These are the canonical data structures for the async CV analysis pipeline.
 """
 
 from datetime import datetime

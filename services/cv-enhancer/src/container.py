@@ -6,8 +6,8 @@ a singleton instance that is reused across all requests. This pattern avoids
 re-initialising heavy objects (LLM clients, compiled LangGraph graphs, etc.)
 on every HTTP request while remaining testable via cache_clear().
 
-Dependency graph (new async pipeline)
---------------------------------------
+Dependency graph
+----------------
 AppSettings
   ├─ S3StorageAdapter      (implements IStorageService)
   ├─ DoclingParser         (implements IDocumentParser)
@@ -15,10 +15,6 @@ AppSettings
   ├─ InMemoryJobRepository (implements IJobRepository)
   ├─ LocalLaTeXCompiler    (implements ILaTeXCompilerService)
   └─ AnalyzeCVUseCase      ← consumes all five above
-
-Legacy pipeline (unchanged)
------------------------------
-  EnhanceCVUseCase ← DoclingParser + LangGraphCVEnhancer
 """
 
 import logging
@@ -26,7 +22,6 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
-from application.use_cases.enhance_cv_use_case import EnhanceCVUseCase
 from config import AppSettings, get_settings
 from core.ports.editor_ai_port import IEditorAIService
 from core.ports.job_repository_port import IJobRepository
@@ -38,7 +33,6 @@ from infrastructure.adapters.editor_ai_gemini_adapter import EditorAIGeminiAdapt
 from infrastructure.adapters.gemini_llm_adapter import GeminiLLMAdapter
 from infrastructure.adapters.in_memory_job_repository import InMemoryJobRepository
 from infrastructure.adapters.latex_compiler_adapter import LocalLaTeXCompiler
-from infrastructure.ai.langgraph_agent import LangGraphCVEnhancer
 from infrastructure.parsers.docling_adapter import DoclingParser
 from infrastructure.storage.s3_storage import S3StorageAdapter
 
@@ -48,29 +42,6 @@ logger = logging.getLogger(__name__)
 _TEMPLATES_DIR = str(
     Path(__file__).parent / "infrastructure" / "templates"
 )
-
-
-# ---------------------------------------------------------------------------
-# Legacy pipeline providers (EnhanceCVUseCase — POST /api/v1/cv/enhance)
-# ---------------------------------------------------------------------------
-
-
-@lru_cache(maxsize=1)
-def get_enhance_cv_use_case() -> EnhanceCVUseCase:
-    """Singleton for the legacy synchronous CV enhancement use case."""
-    settings = get_settings()
-
-    logger.info(
-        "Initialising legacy EnhanceCVUseCase (model: '%s')…", settings.gemini_model
-    )
-    parser = DoclingParser()
-    agent = LangGraphCVEnhancer(
-        api_key=settings.google_api_key,
-        model=settings.gemini_model,
-    )
-    use_case = EnhanceCVUseCase(parser=parser, agent=agent)
-    logger.info("EnhanceCVUseCase wired successfully.")
-    return use_case
 
 
 # ---------------------------------------------------------------------------
