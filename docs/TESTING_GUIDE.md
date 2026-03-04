@@ -28,8 +28,14 @@ AWS_S3_BUCKET=your-bucket
 
 ```bash
 cd services/cv-enhancer
-pip install -r requirements.txt
-python -m uvicorn main:app --host 0.0.0.0 --port 8000 --app-dir src
+# Build image (uses services/cv-enhancer/Dockerfile)
+docker build -t cv-enhancer:latest .
+
+# Run container with env vars from .env
+docker run --rm -p 8000:8000 \
+  --env-file .env \
+  -v "$(pwd)/src:/app/src" \
+  radiance-cv-enhancer
 ```
 
 ```bash
@@ -100,13 +106,13 @@ npm run dev
 
 Open http://localhost:3000
 
-| Flow | Steps |
-|------|-------|
-| Upload → Dashboard | Upload PDF, paste JD (50+ chars), click "Analyze & Enhance CV" → overlay → redirect to `/dashboard` |
-| Dashboard → Workspace | Click "Enhance with AI" → `/workspace` with LaTeX + PDF |
-| AI Edit | Select text in editor → click Zap icon → enter prompt → "Generate" → text replaced |
-| Compile PDF | Click "Compile PDF" → iframe shows compiled PDF |
-| Download PDF | After compile, click "PDF" → download starts |
+| Flow                  | Steps                                                                                               |
+| --------------------- | --------------------------------------------------------------------------------------------------- |
+| Upload → Dashboard    | Upload PDF, paste JD (50+ chars), click "Analyze & Enhance CV" → overlay → redirect to `/dashboard` |
+| Dashboard → Workspace | Click "Enhance with AI" → `/workspace` with LaTeX + PDF                                             |
+| AI Edit               | Select text in editor → click Zap icon → enter prompt → "Generate" → text replaced                  |
+| Compile PDF           | Click "Compile PDF" → iframe shows compiled PDF                                                     |
+| Download PDF          | After compile, click "PDF" → download starts                                                        |
 
 ---
 
@@ -128,10 +134,10 @@ Open http://localhost:3000
 
 ## 5. Troubleshooting
 
-| Issue | Check |
-|-------|-------|
-| CORS errors | Backend `allow_origins=["*"]` in main.py |
-| 422 on analyses | JD must be ≥50 chars |
-| Refinements 500 | `GOOGLE_API_KEY` set |
-| Renders success=false | `pdflatex` on PATH (`which pdflatex`) |
-| S3 upload fails | AWS creds + bucket exist; CORS on bucket for presigned PUT |
+| Issue                 | Check                                                      |
+| --------------------- | ---------------------------------------------------------- |
+| CORS errors           | Backend `allow_origins=["*"]` in main.py                   |
+| 422 on analyses       | JD must be ≥50 chars                                       |
+| Refinements 500       | `GOOGLE_API_KEY` set                                       |
+| Renders success=false | `pdflatex` on PATH (`which pdflatex`)                      |
+| S3 upload fails       | AWS creds + bucket exist; CORS on bucket for presigned PUT |

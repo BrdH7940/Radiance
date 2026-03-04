@@ -44,17 +44,24 @@ _TEMPLATE_NAME = "resume_template.tex"
 
 
 def _escape_latex(text: str) -> str:
-    """Escape LaTeX special characters in a plain-text fragment.
+    """Escape all 10 LaTeX special characters in a plain-text fragment.
 
     Called on text content *before* inline markdown transformations so that
     the escaping does not interfere with the markdown syntax being parsed.
+
+    Order matters:
+    1. Backslash first — avoids double-escaping subsequent replacements.
+    2. Curly braces next — before replacements that introduce them (e.g. \\textasciicircum{}).
+    3. Remaining special chars in any order.
     """
-    # Backslash must come first to avoid double-escaping.
     text = text.replace("\\", r"\textbackslash{}")
+    text = text.replace("{", r"\{")
+    text = text.replace("}", r"\}")
     text = text.replace("&", r"\&")
     text = text.replace("%", r"\%")
     text = text.replace("$", r"\$")
     text = text.replace("#", r"\#")
+    text = text.replace("_", r"\_")
     text = text.replace("^", r"\textasciicircum{}")
     text = text.replace("~", r"\textasciitilde{}")
     return text
@@ -133,9 +140,9 @@ def _markdown_to_latex_body(markdown: str) -> str:
         # ── Bullet list item ─────────────────────────────────────────────
         elif stripped.startswith("- "):
             if not in_itemize:
-                output.append(
-                    r"\begin{itemize}[leftmargin=1.2em,noitemsep,topsep=2pt,parsep=0pt]"
-                )
+                # Use a plain itemize environment that works with base LaTeX
+                # without requiring the enumitem package.
+                output.append(r"\begin{itemize}")
                 in_itemize = True
             content = _process_inline(stripped[2:])
             output.append(rf"  \item {content}")

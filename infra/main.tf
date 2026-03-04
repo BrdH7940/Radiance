@@ -183,6 +183,19 @@ resource "aws_s3_bucket" "frontend_bucket" {
   }
 }
 
+# CORS configuration to allow browser-based uploads and downloads
+resource "aws_s3_bucket_cors_configuration" "frontend_cors" {
+  bucket = aws_s3_bucket.frontend_bucket.id
+
+  cors_rule {
+    allowed_headers = ["*"]
+    allowed_methods = ["GET", "PUT", "HEAD"]
+    allowed_origins = ["*"]
+    expose_headers  = ["ETag"]
+    max_age_seconds = 3000
+  }
+}
+
 # Web hosting
 resource "aws_s3_bucket_website_configuration" "frontend_config" {
   bucket = aws_s3_bucket.frontend_bucket.id
