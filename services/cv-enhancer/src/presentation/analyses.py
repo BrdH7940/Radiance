@@ -76,7 +76,7 @@ class AnalysisResultDTO(BaseModel):
     matching_score: int
     missing_skills: list[SkillGapDTO]
     red_flags: list[RedFlagDTO]
-    latex_code: str
+    enhanced_cv_json: dict
     pdf_url: str
 
 
@@ -152,7 +152,7 @@ async def create_analysis(
     description=(
         "Returns the current status of the job. "
         "When status == 'completed', the full result (score, gaps, red_flags, "
-        "latex_code, pdf_url) is included. "
+        "enhanced_cv_json, pdf_url) is included. "
         "When status == 'failed', an error message is provided."
     ),
     responses={
@@ -190,7 +190,7 @@ async def get_analysis_status(
                 )
                 for rf in r.red_flags
             ],
-            latex_code=r.latex_code,
+            enhanced_cv_json=r.enhanced_cv_json.model_dump(mode="json"),
             pdf_url=r.pdf_url,
         )
 

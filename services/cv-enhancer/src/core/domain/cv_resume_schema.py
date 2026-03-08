@@ -1,0 +1,131 @@
+"""
+Structured CV/resume data schema — the single data contract between LLM output,
+job storage, frontend rendering, and PDF generation.
+
+Replaces the LaTeX/Markdown intermediate format. The LLM Enhancer produces a
+validated CVResumeSchema instance which is:
+  1. Stored as JSON inside AnalysisResult (replaces latex_code).
+  2. Sent to the frontend as enhanced_cv_json in the polling response.
+  3. Rendered to PDF server-side via Jinja2 HTML → WeasyPrint.
+  4. Used by the frontend form-builder for real-time A4 HTML preview.
+"""
+
+from typing import List, Optional
+
+from pydantic import BaseModel, Field
+
+
+class Link(BaseModel):
+    """A professional profile or portfolio link."""
+
+    label: str = Field(
+        description="Human-readable label shown in the CV, e.g. 'LinkedIn', 'GitHub', 'Portfolio'."
+    )
+    url: str = Field(description="Full URL including the https:// scheme.")
+
+
+class PersonalInfo(BaseModel):
+    """Candidate contact and identification details."""
+
+    name: str = Field(description="Candidate's full legal name as it should appear on the CV.")
+    email: str = Field(description="Primary professional email address.")
+    phone: Optional[str] = Field(
+        default=None,
+        description="Phone number in international format, e.g. '+1 555-123-4567'. Preserve exactly from the original CV.",
+    )
+    location: Optional[str] = Field(
+        default=None,
+        description="City and country/state, e.g. 'San Francisco, CA' or 'London, UK'.",
+    )
+    links: List[Link] = Field(
+        default_factory=list,
+        description="Professional links: LinkedIn, GitHub, personal site, etc. Preserve URLs exactly from the original CV.",
+    )
+
+
+class Summary(BaseModel):
+    """Three-sentence executive professional summary."""
+
+    text: str = Field(
+        description=(
+            "Exactly three sentences: "
+            "(1) Role title + total years of experience + core specialisation. "
+            "(2) Two or three key technical strengths most relevant to the target JD. "
+            "(3) One powerful, quantified career highlight (numbers required)."
+        )
+    )
+
+
+class Experience(BaseModel):
+    """A single professional role or position."""
+
+    company: str = Field(description="Full company or organisation name.")
+    role: str = Field(description="Exact job title / position held.")
+    date_range: str = Field(
+        description="Employment period in the format 'Mon YYYY – Mon YYYY' or 'Mon YYYY – Present', e.g. 'Jan 2020 – Dec 2022'."
+    )
+    bullets: List[str] = Field(
+        default_factory=list,
+        description=(
+            "STAR-formatted achievement bullets. Each bullet must: "
+            "start with a strong past-tense action verb, "
+            "contain a quantified result (%, $, x, ms, users), "
+            "be a single dense sentence of 20–35 words."
+        ),
+    )
+
+
+class Education(BaseModel):
+    """A formal education entry (university, bootcamp, certification, etc.)."""
+
+    institution: str = Field(description="Full name of the university, school, or issuing body.")
+    degree: str = Field(
+        description="Degree and field of study, e.g. 'B.Sc. Computer Science' or 'AWS Certified Solutions Architect'."
+    )
+    date_range: str = Field(
+        description="Study period, e.g. '2016 – 2020' or 'Jun 2023'. Preserve exactly from the original."
+    )
+    bullets: List[str] = Field(
+        default_factory=list,
+        description="Optional: notable academic achievements, honours, or highly relevant coursework.",
+    )
+
+
+class SkillGroup(BaseModel):
+    """A thematic grouping of technical or professional skills."""
+
+    category: str = Field(
+        description="Skill category name, e.g. 'Programming Languages', 'Cloud & DevOps', 'Databases', 'Frameworks'."
+    )
+    skills: List[str] = Field(
+        description="Ordered list of specific skills (most relevant to the JD first), e.g. ['Python', 'Go', 'TypeScript']."
+    )
+
+
+class CVResumeSchema(BaseModel):
+    """
+    Complete structured representation of an enhanced CV.
+
+    This is the canonical data model for the entire CV pipeline:
+    LLM Enhancer → Job Storage → Frontend Form Builder → HTML Preview → PDF (WeasyPrint).
+    """
+
+    personal_info: PersonalInfo = Field(
+        description="Contact details. MUST be preserved exactly from the original CV — do NOT invent or alter."
+    )
+    summary: Optional[Summary] = Field(
+        default=None,
+        description="Executive professional summary. Write fresh or rewrite to target the JD.",
+    )
+    experiences: List[Experience] = Field(
+        default_factory=list,
+        description="Professional experience entries in reverse chronological order (most recent first).",
+    )
+    education: List[Education] = Field(
+        default_factory=list,
+        description="Education entries in reverse chronological order.",
+    )
+    skill_groups: List[SkillGroup] = Field(
+        default_factory=list,
+        description="Grouped skills. Reorder categories and individual skills so JD-relevant ones appear first.",
+    )

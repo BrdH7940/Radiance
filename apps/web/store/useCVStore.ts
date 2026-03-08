@@ -1,12 +1,11 @@
 import { create } from 'zustand';
 import { LOADING_STEPS } from '@/services/mockData';
-import type { AnalysisResultDTO } from '@/services/api';
+import type { AnalysisResultDTO, CVResumeSchema } from '@/services/api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type AppPhase = 'upload' | 'analyzing' | 'dashboard' | 'workspace';
 
-/** Analysis result shown on the dashboard; matches backend AnalysisResultDTO. */
 export type AnalysisResultState = AnalysisResultDTO;
 
 export interface CVStore {
@@ -19,7 +18,7 @@ export interface CVStore {
   analysisResult: AnalysisResultState | null;
 
   // Workspace data (populated when entering workspace from dashboard)
-  latexCode: string;
+  cvData: CVResumeSchema | null;
   pdfUrl: string;
 
   // UI state
@@ -32,7 +31,7 @@ export interface CVStore {
   setJdText: (text: string) => void;
   setJobId: (id: string | null) => void;
   setAnalysisResult: (result: AnalysisResultState | null) => void;
-  setLatexCode: (code: string) => void;
+  setCvData: (data: CVResumeSchema | null) => void;
   setPdfUrl: (url: string) => void;
   setPhase: (phase: AppPhase) => void;
   setLoadingStepIndex: (index: number) => void;
@@ -46,7 +45,7 @@ const initialState = {
   jdText: '',
   jobId: null,
   analysisResult: null,
-  latexCode: '',
+  cvData: null,
   pdfUrl: '',
   phase: 'upload' as AppPhase,
   loadingStepIndex: 0,
@@ -62,7 +61,7 @@ export const useCVStore = create<CVStore>((set) => ({
   setJdText: (text) => set({ jdText: text }),
   setJobId: (id) => set({ jobId: id }),
   setAnalysisResult: (result) => set({ analysisResult: result }),
-  setLatexCode: (code) => set({ latexCode: code }),
+  setCvData: (data) => set({ cvData: data }),
   setPdfUrl: (url) => set({ pdfUrl: url }),
   setPhase: (phase) => set({ phase }),
   setLoadingStepIndex: (index) => set({ loadingStepIndex: index }),

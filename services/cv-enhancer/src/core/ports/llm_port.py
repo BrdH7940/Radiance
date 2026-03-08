@@ -11,6 +11,7 @@ from typing import List
 from pydantic import BaseModel, Field
 
 from core.domain.analysis_job import RedFlag
+from core.domain.cv_resume_schema import CVResumeSchema
 from domain.models import SkillGap
 
 
@@ -32,10 +33,10 @@ class FullAnalysisOutput(BaseModel):
     red_flags: List[RedFlag] = Field(
         description="Structural or content concerns a recruiter would immediately notice."
     )
-    enhanced_cv_markdown: str = Field(
+    enhanced_cv_json: CVResumeSchema = Field(
         description=(
-            "Complete, STAR-rewritten CV in clean Markdown. "
-            "Ready to be converted to LaTeX and compiled to PDF."
+            "Complete, STAR-rewritten CV as structured JSON. "
+            "Ready to be rendered to HTML and compiled to PDF via WeasyPrint."
         )
     )
 
@@ -49,7 +50,7 @@ class ILLMService(ABC):
         cv_text: str,
         jd_text: str,
     ) -> FullAnalysisOutput:
-        """Analyse a CV against a JD and produce an enhanced version.
+        """Analyse a CV against a JD and produce an enhanced structured version.
 
         Args:
             cv_text: Parsed CV content in Markdown or plain text.
@@ -57,7 +58,7 @@ class ILLMService(ABC):
 
         Returns:
             FullAnalysisOutput containing the score, gaps, red flags,
-            and the STAR-enhanced CV in Markdown.
+            and the STAR-enhanced CV as a validated CVResumeSchema.
 
         Raises:
             Exception: Any LLM provider error propagates to the caller,

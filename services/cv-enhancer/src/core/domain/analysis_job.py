@@ -10,6 +10,7 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from core.domain.cv_resume_schema import CVResumeSchema
 from domain.models import SkillGap  # Reuse the validated SkillGap from core domain.
 
 
@@ -54,8 +55,8 @@ class AnalysisResult(BaseModel):
     red_flags: List[RedFlag] = Field(
         description="Structural or content issues a recruiter would flag immediately."
     )
-    latex_code: str = Field(
-        description="Full, compilable LaTeX source of the enhanced CV document."
+    enhanced_cv_json: CVResumeSchema = Field(
+        description="Structured CV data produced by the AI Enhancer. Used for form editing, HTML preview, and PDF rendering."
     )
     pdf_url: str = Field(
         description="Presigned S3 URL for the compiled enhanced-CV PDF."

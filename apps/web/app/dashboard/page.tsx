@@ -11,7 +11,7 @@ export default function DashboardPage() {
   const router = useRouter()
   const {
     analysisResult,
-    setLatexCode,
+    setCvData,
     setPdfUrl,
     setPhase,
   } = useCVStore()
@@ -24,7 +24,7 @@ export default function DashboardPage() {
 
   const handleEnhanceWithAI = () => {
     if (!analysisResult) return
-    setLatexCode(analysisResult.latex_code)
+    setCvData(analysisResult.enhanced_cv_json)
     setPdfUrl(analysisResult.pdf_url)
     setPhase('workspace')
     router.push('/workspace')

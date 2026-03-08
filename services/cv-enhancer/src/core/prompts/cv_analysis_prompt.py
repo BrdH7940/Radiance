@@ -69,14 +69,15 @@ For each red flag provide:
 
 # ---------------------------------------------------------------------------
 # Node 2 — Enhancer
-# Produces: enhanced_cv_markdown
+# Produces: CVResumeSchema (structured JSON)
 # ---------------------------------------------------------------------------
 
 ENHANCER_SYSTEM_PROMPT: str = (
     "You are an elite technical resume writer specialising in ATS optimisation and the STAR "
-    "methodology. You transform ordinary CVs into compelling, metric-rich narratives that pass "
-    "automated ATS filters and impress senior hiring managers at top tech companies. "
-    "You write precisely, avoid fluff, and every claim you make is grounded in the original CV."
+    "methodology. You transform ordinary CVs into compelling, metric-rich structured data that "
+    "passes automated ATS filters and impresses senior hiring managers at top tech companies. "
+    "You write precisely, avoid fluff, and every claim you make is grounded in the original CV. "
+    "You output ONLY structured JSON — no Markdown, no LaTeX, no plain text explanation."
 )
 
 ENHANCER_HUMAN_PROMPT: str = """\
@@ -94,34 +95,41 @@ ENHANCER_HUMAN_PROMPT: str = """\
 
 ## Rewriting Instructions
 
-### Experience Section (highest priority)
-- Apply the **STAR method** to every bullet: Situation → Task → Action → Result.
-- Begin each bullet with a strong past-tense action verb
-  (e.g. Architected, Spearheaded, Reduced, Automated, Scaled, Shipped, Delivered).
-- **Quantify every result**: percentages, latency/throughput numbers, team size,
-  cost savings ($), revenue impact, time-to-market improvement, uptime figures.
-- Naturally weave in keywords and technologies from the Job Description.
-- **Eliminate fluff**: remove "responsible for", "helped with", "worked on", "participated in".
-- Each bullet: single dense sentence, 20–35 words.
+### personal_info (PRESERVE EXACTLY)
+- Copy the candidate's name, email, phone, location, and links verbatim from the original CV.
+- Do NOT invent, alter, or omit any contact detail.
 
-### Professional Summary (top of CV)
-- Write or rewrite a 3-sentence executive summary tailored to the JD.
-  - Sentence 1: Role title + years of experience + core specialisation.
-  - Sentence 2: 2–3 key technical strengths most relevant to the JD.
-  - Sentence 3: One strong, quantified career highlight.
+### summary
+- Write exactly 3 sentences:
+  1. Role title + total years of experience + core specialisation area.
+  2. Two or three key technical strengths most aligned with the target JD (use JD keywords).
+  3. One powerful, quantified career highlight with real numbers from the original CV.
 
-### Skills Section
-- Re-order to place JD-relevant technologies first.
-- Where skill gaps exist and related experience is present, surface that experience.
+### experiences (highest priority — STAR method)
+- List all positions from the original CV in reverse chronological order.
+- For each position, rewrite every bullet using the STAR method (Situation → Task → Action → Result).
+- Begin each bullet with a strong past-tense action verb (Architected, Spearheaded, Reduced, Automated, Scaled, Shipped, Delivered, Optimised, Engineered, Led).
+- Quantify every result: percentages, latency/throughput numbers, team size, cost savings ($), revenue impact, uptime figures.
+- Weave in keywords and technologies from the Job Description naturally.
+- Eliminate all fluff: "responsible for", "helped with", "worked on", "participated in".
+- Each bullet: a single dense sentence of 20–35 words.
+- Preserve company names, role titles, and date ranges exactly from the original CV.
+
+### education
+- Copy all education entries from the original CV exactly (institution, degree, date_range).
+- Do NOT invent or alter education details.
+- bullets: include only notable honours or directly relevant coursework, or leave empty.
+
+### skill_groups
+- Group skills into meaningful categories (e.g. Programming Languages, Cloud & DevOps, Databases, Frameworks, Tools).
+- Re-order to place the most JD-relevant skills first within each group and first among groups.
+- Where skill gaps exist and evidence is present in the CV, surface that evidence in experience bullets.
+- Remove unsupported buzz-word skills that have no backing in the experience section.
 
 ### Addressing Red Flags
-- For employment gaps: add a brief honest context phrase where appropriate.
-- For vague bullets: transform them with the STAR method (do not fabricate metrics).
-- For buzzword-heavy skills: remove unsupported skills or tie them to concrete examples.
+- Employment gaps: add a brief, honest context phrase in the relevant experience bullet if appropriate.
+- Vague bullets: transform with STAR method — do NOT fabricate specific numbers; use ranges or qualitative improvements if needed.
 
-### Preserved Sections (do NOT modify)
-- Contact information, education details, and certifications must stay exactly as-is.
-
-Output the **complete, submission-ready CV** in clean Markdown.
-All sections must be present. Do not truncate or summarise.\
+Output the complete, submission-ready CV as a structured JSON object matching the provided schema.
+All sections must be fully populated. Do not truncate, summarise, or omit any section.\
 """

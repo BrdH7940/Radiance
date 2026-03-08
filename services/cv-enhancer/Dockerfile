@@ -1,18 +1,25 @@
 # ── Stage: base image ──────────────────────────────────────────────────────────
 FROM python:3.11-slim AS base
 
-# System packages required by Docling's vision pipeline (poppler for PDF rendering,
-# libgl / libglib for OpenCV used internally by some Docling models),
-# plus a TeX Live subset with all packages used in resume_template.tex.
+# System packages:
+#   - libgl1, libglib2.0-0, poppler-utils: required by Docling's vision pipeline
+#   - WeasyPrint runtime deps (Pango, HarfBuzz, Cairo, GDK-Pixbuf, libffi, JPEG, OpenJPEG)
+#   - fonts-liberation: provides metric-compatible Liberation fonts (Arial/Times/Courier)
+#     so WeasyPrint can render PDFs without missing-font fallback issues
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libgl1 \
         libglib2.0-0 \
         poppler-utils \
-        texlive-latex-base \        # article, inputenc, fontenc, core LaTeX
-        texlive-latex-recommended \ # geometry, parskip, hyperref helpers, etc.
-        texlive-fonts-recommended \ # font sets commonly used with lmodern
-        lmodern \                   # explicit Latin Modern fonts (lmodern.sty)
-        texlive-latex-extra \       # enumitem, titlesec, and other extras
+        libpango-1.0-0 \
+        libharfbuzz0b \
+        libpangoft2-1.0-0 \
+        libcairo2 \
+        libgdk-pixbuf2.0-0 \
+        shared-mime-info \
+        libffi-dev \
+        libjpeg-dev \
+        libopenjp2-7-dev \
+        fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -36,12 +43,8 @@ ENV PYTHONPATH=/app/src
 # ── Runtime ────────────────────────────────────────────────────────────────────
 EXPOSE 8000
 
-# For development we enable uvicorn's auto-reload so that code changes under
-# /app/src (including from a bind mount) are picked up without rebuilding
-# the image each time.
 CMD ["uvicorn", "main:app", \
      "--host", "0.0.0.0", \
      "--port", "8000", \
      "--app-dir", "/app/src", \
      "--reload"]
-

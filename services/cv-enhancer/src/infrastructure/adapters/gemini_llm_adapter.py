@@ -3,7 +3,7 @@ Gemini (via LangGraph) implementation of ILLMService.
 
 Pipeline: Analyzer node → Enhancer node
 - Analyzer:  produces matching_score + missing_skills + red_flags.
-- Enhancer:  produces STAR-rewritten CV in Markdown, informed by the gap analysis.
+- Enhancer:  produces a complete CVResumeSchema (structured JSON), informed by the gap analysis.
 
 The prompts used here are imported from core.prompts — they are never inlined.
 """
@@ -17,6 +17,7 @@ from langgraph.graph import END, StateGraph
 from pydantic import BaseModel, Field
 
 from core.domain.analysis_job import RedFlag
+from core.domain.cv_resume_schema import CVResumeSchema
 from core.ports.llm_port import FullAnalysisOutput, ILLMService
 from core.prompts.cv_analysis_prompt import (
     ANALYZER_HUMAN_PROMPT,
@@ -40,9 +41,9 @@ class _PipelineState(TypedDict, total=False):
     cv_text: str
     jd_text: str
     matching_score: int
-    missing_skills: List[dict]  # serialised SkillGap dicts
-    red_flags: List[dict]       # serialised RedFlag dicts
-    enhanced_cv_markdown: str
+    missing_skills: List[dict]   # serialised SkillGap dicts
+    red_flags: List[dict]        # serialised RedFlag dicts
+    enhanced_cv_json: dict       # serialised CVResumeSchema dict
 
 
 # ---------------------------------------------------------------------------
@@ -56,17 +57,6 @@ class _AnalyzerOutput(BaseModel):
     matching_score: int = Field(ge=0, le=100)
     missing_skills: List[SkillGap]
     red_flags: List[RedFlag]
-
-
-class _EnhancerOutput(BaseModel):
-    """Gemini's structured response from the Enhancer node."""
-
-    enhanced_cv_markdown: str = Field(
-        description=(
-            "Complete, submission-ready CV in clean Markdown. "
-            "Every experience bullet follows the STAR method with quantified results."
-        )
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -106,7 +96,7 @@ class GeminiLLMAdapter(ILLMService):
             ChatPromptTemplate.from_messages(
                 [("system", ENHANCER_SYSTEM_PROMPT), ("human", ENHANCER_HUMAN_PROMPT)]
             )
-            | llm.with_structured_output(_EnhancerOutput)
+            | llm.with_structured_output(CVResumeSchema)
         )
 
         # ------------------------------------------------------------------
@@ -135,7 +125,7 @@ class GeminiLLMAdapter(ILLMService):
         # Node 2 — Enhancer
         # ------------------------------------------------------------------
         async def enhancer_node(state: _PipelineState) -> dict:
-            logger.info("Pipeline ▶ Enhancer: invoking Gemini for STAR rewrite.")
+            logger.info("Pipeline ▶ Enhancer: invoking Gemini for structured CV JSON.")
 
             missing_skills: List[dict] = state.get("missing_skills", [])
             red_flags: List[dict] = state.get("red_flags", [])
@@ -157,7 +147,7 @@ class GeminiLLMAdapter(ILLMService):
                 else "No structural red flags identified."
             )
 
-            result: _EnhancerOutput = await enhancer_chain.ainvoke(
+            result: CVResumeSchema = await enhancer_chain.ainvoke(
                 {
                     "cv_text": state["cv_text"],
                     "jd_text": state["jd_text"],
@@ -167,10 +157,11 @@ class GeminiLLMAdapter(ILLMService):
             )
 
             logger.info(
-                "Pipeline ✓ Enhancer — produced %d characters.",
-                len(result.enhanced_cv_markdown),
+                "Pipeline ✓ Enhancer — produced CV JSON for '%s' with %d experiences.",
+                result.personal_info.name,
+                len(result.experiences),
             )
-            return {"enhanced_cv_markdown": result.enhanced_cv_markdown}
+            return {"enhanced_cv_json": result.model_dump(mode="json")}
 
         # ------------------------------------------------------------------
         # Graph wiring
@@ -193,7 +184,7 @@ class GeminiLLMAdapter(ILLMService):
             jd_text: Job Description text.
 
         Returns:
-            FullAnalysisOutput with score, gaps, red flags, and enhanced Markdown.
+            FullAnalysisOutput with score, gaps, red flags, and enhanced CVResumeSchema.
         """
         logger.info("GeminiLLMAdapter: starting pipeline.")
 
@@ -206,5 +197,5 @@ class GeminiLLMAdapter(ILLMService):
             matching_score=final_state["matching_score"],
             missing_skills=[SkillGap(**g) for g in final_state["missing_skills"]],
             red_flags=[RedFlag(**rf) for rf in final_state["red_flags"]],
-            enhanced_cv_markdown=final_state["enhanced_cv_markdown"],
+            enhanced_cv_json=CVResumeSchema.model_validate(final_state["enhanced_cv_json"]),
         )

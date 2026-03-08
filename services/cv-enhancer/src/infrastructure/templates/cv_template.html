@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    @page {
+      size: A4;
+      margin: 14mm 18mm;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      font-size: 9.5pt;
+      color: #111827;
+      line-height: 1.45;
+    }
+
+    /* ── Header ──────────────────────────────────────────────────────────── */
+    .cv-header {
+      text-align: center;
+      margin-bottom: 8pt;
+      padding-bottom: 8pt;
+      border-bottom: 1.5pt solid #1d4ed8;
+    }
+
+    .cv-name {
+      font-size: 20pt;
+      font-weight: 900;
+      color: #0f172a;
+      letter-spacing: -0.3pt;
+      margin-bottom: 4pt;
+    }
+
+    .cv-contact {
+      font-size: 8.5pt;
+      color: #475569;
+    }
+
+    .cv-contact a {
+      color: #1d4ed8;
+      text-decoration: none;
+    }
+
+    .cv-contact .sep {
+      margin: 0 5pt;
+      color: #cbd5e1;
+    }
+
+    /* ── Section headings ────────────────────────────────────────────────── */
+    h2 {
+      font-size: 9pt;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #1d4ed8;
+      border-bottom: 0.75pt solid rgba(29, 78, 216, 0.35);
+      padding-bottom: 2pt;
+      margin-top: 10pt;
+      margin-bottom: 5pt;
+    }
+
+    /* ── Summary ─────────────────────────────────────────────────────────── */
+    .summary-text {
+      font-size: 9pt;
+      color: #334155;
+      line-height: 1.55;
+    }
+
+    /* ── Experience / Education entries ──────────────────────────────────── */
+    .entry {
+      margin-bottom: 7pt;
+      page-break-inside: avoid;
+    }
+
+    .entry-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 1pt;
+    }
+
+    .entry-title {
+      font-size: 9.5pt;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    .entry-date {
+      font-size: 8.5pt;
+      color: #64748b;
+      font-style: italic;
+      white-space: nowrap;
+      margin-left: 8pt;
+    }
+
+    .entry-subtitle {
+      font-size: 8.5pt;
+      color: #475569;
+      font-style: italic;
+      margin-bottom: 3pt;
+    }
+
+    ul {
+      padding-left: 12pt;
+      margin-top: 3pt;
+    }
+
+    li {
+      font-size: 9pt;
+      color: #334155;
+      margin-bottom: 2pt;
+      line-height: 1.42;
+    }
+
+    /* ── Skills ──────────────────────────────────────────────────────────── */
+    .skill-row {
+      display: flex;
+      margin-bottom: 2.5pt;
+      font-size: 9pt;
+    }
+
+    .skill-category {
+      font-weight: 700;
+      color: #0f172a;
+      min-width: 110pt;
+      flex-shrink: 0;
+    }
+
+    .skill-list {
+      color: #475569;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Header ──────────────────────────────────────────────────────────── -->
+  <div class="cv-header">
+    <div class="cv-name">{{ cv.personal_info.name }}</div>
+    <div class="cv-contact">
+      {% if cv.personal_info.email %}
+        <a href="mailto:{{ cv.personal_info.email }}">{{ cv.personal_info.email }}</a>
+      {% endif %}
+      {% if cv.personal_info.phone %}
+        <span class="sep">·</span><span>{{ cv.personal_info.phone }}</span>
+      {% endif %}
+      {% if cv.personal_info.location %}
+        <span class="sep">·</span><span>{{ cv.personal_info.location }}</span>
+      {% endif %}
+      {% for link in cv.personal_info.links %}
+        <span class="sep">·</span><a href="{{ link.url }}">{{ link.label }}</a>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- ── Professional Summary ────────────────────────────────────────────── -->
+  {% if cv.summary %}
+  <section>
+    <h2>Professional Summary</h2>
+    <p class="summary-text">{{ cv.summary.text }}</p>
+  </section>
+  {% endif %}
+
+  <!-- ── Experience ──────────────────────────────────────────────────────── -->
+  {% if cv.experiences %}
+  <section>
+    <h2>Experience</h2>
+    {% for exp in cv.experiences %}
+    <div class="entry">
+      <div class="entry-header">
+        <span class="entry-title">{{ exp.role }}</span>
+        <span class="entry-date">{{ exp.date_range }}</span>
+      </div>
+      <div class="entry-subtitle">{{ exp.company }}</div>
+      {% if exp.bullets %}
+      <ul>
+        {% for bullet in exp.bullets %}
+        <li>{{ bullet }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </section>
+  {% endif %}
+
+  <!-- ── Education ───────────────────────────────────────────────────────── -->
+  {% if cv.education %}
+  <section>
+    <h2>Education</h2>
+    {% for edu in cv.education %}
+    <div class="entry">
+      <div class="entry-header">
+        <span class="entry-title">{{ edu.degree }}</span>
+        <span class="entry-date">{{ edu.date_range }}</span>
+      </div>
+      <div class="entry-subtitle">{{ edu.institution }}</div>
+      {% if edu.bullets %}
+      <ul>
+        {% for bullet in edu.bullets %}
+        <li>{{ bullet }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </section>
+  {% endif %}
+
+  <!-- ── Skills ──────────────────────────────────────────────────────────── -->
+  {% if cv.skill_groups %}
+  <section>
+    <h2>Skills</h2>
+    {% for group in cv.skill_groups %}
+    <div class="skill-row">
+      <span class="skill-category">{{ group.category }}:</span>
+      <span class="skill-list">{{ group.skills | join(', ') }}</span>
+    </div>
+    {% endfor %}
+  </section>
+  {% endif %}
+
+</body>
+</html>

@@ -1,7 +1,7 @@
 """
 Use Case: Analyse and enhance a CV asynchronously.
 
-This class is the sole orchestrator of the 8-step background pipeline.
+This class is the sole orchestrator of the 7-step background pipeline.
 It depends only on ports (interfaces) — never on concrete adapters or cloud SDKs.
 
 Pipeline steps
@@ -9,13 +9,12 @@ Pipeline steps
 1.  Mark job as PROCESSING in the repository.
 2.  Download the raw CV PDF from storage (S3) to a local /tmp directory.
 3.  Parse the PDF to Markdown/plain text via the document parser port.
-4.  Run the LLM analysis: produces score, gaps, red_flags, and enhanced Markdown.
-5.  Convert enhanced Markdown to a full LaTeX document via the LaTeX compiler port.
-6.  Compile the LaTeX document to PDF (pdflatex).
-7.  Upload the compiled PDF to storage under the enhanced-pdf/ prefix.
-8.  Generate a presigned download URL and persist the completed result to the repository.
+4.  Run the LLM analysis: produces score, gaps, red_flags, and enhanced_cv_json (CVResumeSchema).
+5.  Render the CVResumeSchema to PDF via HTML/WeasyPrint (IPDFRenderService).
+6.  Upload the compiled PDF to storage under the enhanced-pdf/ prefix.
+7.  Generate a presigned download URL and persist the completed result to the repository.
 
-Any exception in steps 2–8 marks the job as FAILED with a structured error message
+Any exception in steps 2–7 marks the job as FAILED with a structured error message
 so that the background task never fails silently.
 """
 
@@ -28,8 +27,8 @@ from uuid import uuid4
 from config import AppSettings
 from core.domain.analysis_job import AnalysisJob, AnalysisResult, JobStatus
 from core.ports.job_repository_port import IJobRepository
-from core.ports.latex_compiler_port import ILaTeXCompilerService
 from core.ports.llm_port import ILLMService
+from core.ports.pdf_render_port import IPDFRenderService
 from domain.ports import IDocumentParser, IStorageService
 
 logger = logging.getLogger(__name__)
@@ -48,14 +47,14 @@ class AnalyzeCVUseCase:
         parser: IDocumentParser,
         llm: ILLMService,
         job_repo: IJobRepository,
-        latex_compiler: ILaTeXCompilerService,
+        pdf_renderer: IPDFRenderService,
         settings: AppSettings,
     ) -> None:
         self._storage = storage
         self._parser = parser
         self._llm = llm
         self._job_repo = job_repo
-        self._latex_compiler = latex_compiler
+        self._pdf_renderer = pdf_renderer
         self._settings = settings
 
     async def execute(self, job_id: str, s3_key: str, jd_text: str) -> None:
@@ -94,7 +93,7 @@ class AnalyzeCVUseCase:
             )
             return
 
-        # ── Steps 2–8: Pipeline (any failure → FAILED) ──────────────────────
+        # ── Steps 2–7: Pipeline (any failure → FAILED) ──────────────────────
         with tempfile.TemporaryDirectory(prefix="radiance_cv_") as work_dir:
             try:
                 # Step 2 — Download PDF from S3
@@ -112,54 +111,49 @@ class AnalyzeCVUseCase:
                     "Step 3 ✓ Extracted %d characters from CV.", len(cv_text)
                 )
 
-                # Step 4 — LLM analysis + enhancement
+                # Step 4 — LLM analysis + structured CV enhancement
                 logger.info("Step 4: Running LLM pipeline (Gemini).")
                 analysis = await self._llm.analyze_and_enhance(
                     cv_text=cv_text, jd_text=jd_text
                 )
                 logger.info(
-                    "Step 4 ✓ Score: %d, gaps: %d, red flags: %d.",
+                    "Step 4 ✓ Score: %d, gaps: %d, red flags: %d, candidate: '%s'.",
                     analysis.matching_score,
                     len(analysis.missing_skills),
                     len(analysis.red_flags),
+                    analysis.enhanced_cv_json.personal_info.name,
                 )
 
-                # Step 5 — Markdown → LaTeX
-                logger.info("Step 5: Converting Markdown CV to LaTeX via Jinja2.")
-                latex_code: str = self._latex_compiler.markdown_to_latex(
-                    analysis.enhanced_cv_markdown
-                )
-                logger.info("Step 5 ✓ LaTeX document: %d chars.", len(latex_code))
-
-                # Step 6 — Compile LaTeX → PDF
-                logger.info("Step 6: Compiling LaTeX with pdflatex.")
+                # Step 5 — Render CVResumeSchema → HTML → PDF (WeasyPrint)
+                logger.info("Step 5: Rendering CV JSON to PDF via HTML/WeasyPrint.")
                 pdf_output_dir = os.path.join(work_dir, "pdf_output")
-                local_pdf_out: str = self._latex_compiler.compile_to_pdf(
-                    latex_code=latex_code, output_dir=pdf_output_dir
+                local_pdf_out: str = self._pdf_renderer.render_to_pdf(
+                    cv_data=analysis.enhanced_cv_json,
+                    output_dir=pdf_output_dir,
                 )
-                logger.info("Step 6 ✓ PDF compiled → '%s'.", local_pdf_out)
+                logger.info("Step 5 ✓ PDF rendered → '%s'.", local_pdf_out)
 
-                # Step 7 — Upload enhanced PDF to S3
+                # Step 6 — Upload enhanced PDF to S3
                 s3_pdf_key = (
                     f"{self._settings.s3_enhanced_prefix}"
                     f"{uuid4().hex}_enhanced_cv.pdf"
                 )
-                logger.info("Step 7: Uploading PDF to S3 key '%s'.", s3_pdf_key)
+                logger.info("Step 6: Uploading PDF to S3 key '%s'.", s3_pdf_key)
                 self._storage.upload_file(
                     local_path=local_pdf_out,
                     object_key=s3_pdf_key,
                     content_type="application/pdf",
                 )
 
-                # Step 8 — Generate presigned download URL + persist result
-                logger.info("Step 8: Generating presigned download URL.")
+                # Step 7 — Generate presigned download URL + persist result
+                logger.info("Step 7: Generating presigned download URL.")
                 pdf_url: str = self._storage.generate_presigned_download_url(s3_pdf_key)
 
                 result = AnalysisResult(
                     matching_score=analysis.matching_score,
                     missing_skills=analysis.missing_skills,
                     red_flags=analysis.red_flags,
-                    latex_code=latex_code,
+                    enhanced_cv_json=analysis.enhanced_cv_json,
                     pdf_url=pdf_url,
                 )
 
@@ -204,7 +198,6 @@ class AnalyzeCVUseCase:
             await self._job_repo.update(failed_job)
             logger.info("Job '%s' marked as FAILED.", job_id)
         except Exception as repo_exc:
-            # Last resort — log but do not re-raise; the BG task must not crash.
             logger.critical(
                 "Could not persist FAILED status for job '%s': %s",
                 job_id,

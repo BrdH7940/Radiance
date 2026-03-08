@@ -9,36 +9,36 @@ on every HTTP request while remaining testable via cache_clear().
 Dependency graph
 ----------------
 AppSettings
-  ├─ S3StorageAdapter      (implements IStorageService)
-  ├─ DoclingParser         (implements IDocumentParser)
-  ├─ GeminiLLMAdapter      (implements ILLMService)
-  ├─ InMemoryJobRepository (implements IJobRepository)
-  ├─ LocalLaTeXCompiler    (implements ILaTeXCompilerService)
-  └─ AnalyzeCVUseCase      ← consumes all five above
+  ├─ S3StorageAdapter         (implements IStorageService)
+  ├─ DoclingParser            (implements IDocumentParser)
+  ├─ GeminiLLMAdapter         (implements ILLMService)
+  ├─ InMemoryJobRepository    (implements IJobRepository)
+  ├─ WeasyPrintPDFAdapter     (implements IPDFRenderService)
+  ├─ EditorAIGeminiAdapter    (implements IEditorAIService)
+  └─ AnalyzeCVUseCase         ← consumes all five above
 """
 
 import logging
-import os
 from functools import lru_cache
 from pathlib import Path
 
 from config import AppSettings, get_settings
 from core.ports.editor_ai_port import IEditorAIService
 from core.ports.job_repository_port import IJobRepository
-from core.ports.latex_compiler_port import ILaTeXCompilerService
 from core.ports.llm_port import ILLMService
+from core.ports.pdf_render_port import IPDFRenderService
 from core.use_cases.analyze_cv_use_case import AnalyzeCVUseCase
 from domain.ports import IStorageService
 from infrastructure.adapters.editor_ai_gemini_adapter import EditorAIGeminiAdapter
 from infrastructure.adapters.gemini_llm_adapter import GeminiLLMAdapter
 from infrastructure.adapters.in_memory_job_repository import InMemoryJobRepository
-from infrastructure.adapters.latex_compiler_adapter import LocalLaTeXCompiler
+from infrastructure.adapters.weasyprint_pdf_adapter import WeasyPrintPDFAdapter
 from infrastructure.parsers.docling_adapter import DoclingParser
 from infrastructure.storage.s3_storage import S3StorageAdapter
 
 logger = logging.getLogger(__name__)
 
-# Absolute path to the Jinja2 LaTeX templates directory.
+# Absolute path to the Jinja2 HTML templates directory.
 _TEMPLATES_DIR = str(
     Path(__file__).parent / "infrastructure" / "templates"
 )
@@ -69,7 +69,7 @@ def get_document_parser() -> DoclingParser:
 
 
 # ---------------------------------------------------------------------------
-# New async pipeline providers
+# Core pipeline providers
 # ---------------------------------------------------------------------------
 
 
@@ -94,17 +94,17 @@ def get_job_repository() -> IJobRepository:
 
 
 @lru_cache(maxsize=1)
-def get_latex_compiler() -> ILaTeXCompilerService:
-    """Singleton LocalLaTeXCompiler backed by Jinja2 + pdflatex."""
+def get_pdf_renderer() -> IPDFRenderService:
+    """Singleton WeasyPrintPDFAdapter backed by Jinja2 HTML template."""
     logger.info(
-        "Initialising LocalLaTeXCompiler (templates: '%s')…", _TEMPLATES_DIR
+        "Initialising WeasyPrintPDFAdapter (templates: '%s')…", _TEMPLATES_DIR
     )
-    return LocalLaTeXCompiler(template_dir=_TEMPLATES_DIR)
+    return WeasyPrintPDFAdapter(template_dir=_TEMPLATES_DIR)
 
 
 @lru_cache(maxsize=1)
 def get_editor_ai_service() -> IEditorAIService:
-    """Singleton EditorAIGeminiAdapter for LaTeX snippet refinement."""
+    """Singleton EditorAIGeminiAdapter for plain-text CV field refinement."""
     settings: AppSettings = get_settings()
     logger.info(
         "Initialising EditorAIGeminiAdapter (model: '%s')…", settings.gemini_model
@@ -117,7 +117,7 @@ def get_editor_ai_service() -> IEditorAIService:
 
 @lru_cache(maxsize=1)
 def get_analyze_cv_use_case() -> AnalyzeCVUseCase:
-    """Singleton AnalyzeCVUseCase with all five injected port implementations."""
+    """Singleton AnalyzeCVUseCase with all injected port implementations."""
     settings = get_settings()
     logger.info("Wiring AnalyzeCVUseCase dependencies…")
     use_case = AnalyzeCVUseCase(
@@ -125,7 +125,7 @@ def get_analyze_cv_use_case() -> AnalyzeCVUseCase:
         parser=get_document_parser(),
         llm=get_llm_service(),
         job_repo=get_job_repository(),
-        latex_compiler=get_latex_compiler(),
+        pdf_renderer=get_pdf_renderer(),
         settings=settings,
     )
     logger.info("AnalyzeCVUseCase wired successfully.")
