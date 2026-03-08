@@ -39,8 +39,22 @@ export interface CVExperience {
 export interface CVEducation {
     institution: string
     degree: string
-    date_range: string
-    bullets: string[]
+    major: string
+    start_date: string
+    end_date: string
+    location?: string | null
+    gpa?: string | null
+    honors: string[]
+}
+
+export interface CVProject {
+    name: string
+    role: string
+    tech_stack: string[]
+    start_date: string
+    end_date: string
+    link?: string | null
+    description: string[]
 }
 
 export interface CVSkillGroup {
@@ -48,12 +62,19 @@ export interface CVSkillGroup {
     skills: string[]
 }
 
+export interface CVAwardsCertification {
+    title: string
+    link?: string | null
+}
+
 export interface CVResumeSchema {
     personal_info: CVPersonalInfo
     summary?: CVSummary | null
     experiences: CVExperience[]
     education: CVEducation[]
+    projects: CVProject[]
     skill_groups: CVSkillGroup[]
+    awards_certifications: CVAwardsCertification[]
 }
 
 // ─── API response types ───────────────────────────────────────────────────────

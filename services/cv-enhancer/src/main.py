@@ -40,12 +40,12 @@ async def lifespan(app: FastAPI):
         get_analyze_cv_use_case,
         get_editor_ai_service,
         get_job_repository,
-        get_latex_compiler,
+        get_pdf_renderer,
         get_storage_service,
     )
 
     get_storage_service()       # S3 adapter
-    get_latex_compiler()        # Jinja2 + pdflatex
+    get_pdf_renderer()          # Jinja2 HTML + WeasyPrint
     get_job_repository()        # in-memory store
     get_editor_ai_service()     # editor refinements
     get_analyze_cv_use_case()   # new async pipeline

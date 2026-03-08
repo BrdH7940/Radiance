@@ -23,8 +23,10 @@ import {
     Zap,
     AlignLeft,
     Link,
+    FolderKanban,
+    Award,
 } from 'lucide-react'
-import type { CVResumeSchema, CVExperience, CVEducation, CVSkillGroup, CVLink } from '@/services/api'
+import type { CVResumeSchema, CVExperience, CVEducation, CVProject, CVSkillGroup, CVAwardsCertification, CVLink } from '@/services/api'
 import { aiRefineText } from '@/services/api'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -349,19 +351,40 @@ export function CVFormBuilder({ cvData, onChange }: CVFormBuilderProps) {
         edus[i] = { ...edus[i], ...patch }
         update({ education: edus })
     }
-    const updateEduBullet = (ei: number, bi: number, val: string) => {
-        const bullets = [...cvData.education[ei].bullets]
-        bullets[bi] = val
-        updateEdu(ei, { bullets })
+    const updateEduHonor = (ei: number, bi: number, val: string) => {
+        const honors = [...cvData.education[ei].honors]
+        honors[bi] = val
+        updateEdu(ei, { honors })
     }
-    const addEduBullet = (ei: number) =>
-        updateEdu(ei, { bullets: [...cvData.education[ei].bullets, ''] })
-    const removeEduBullet = (ei: number, bi: number) =>
-        updateEdu(ei, { bullets: cvData.education[ei].bullets.filter((_, j) => j !== bi) })
+    const addEduHonor = (ei: number) =>
+        updateEdu(ei, { honors: [...cvData.education[ei].honors, ''] })
+    const removeEduHonor = (ei: number, bi: number) =>
+        updateEdu(ei, { honors: cvData.education[ei].honors.filter((_, j) => j !== bi) })
     const addEdu = () =>
-        update({ education: [...cvData.education, { institution: '', degree: '', date_range: '', bullets: [] }] })
+        update({ education: [...cvData.education, { institution: '', degree: '', major: '', start_date: '', end_date: '', location: null, gpa: null, honors: [] }] })
     const removeEdu = (i: number) =>
         update({ education: cvData.education.filter((_, j) => j !== i) })
+
+    // ── Projects ──────────────────────────────────────────────────────────────
+
+    const updateProj = (i: number, patch: Partial<CVProject>) => {
+        const projs = [...cvData.projects]
+        projs[i] = { ...projs[i], ...patch }
+        update({ projects: projs })
+    }
+    const updateProjDesc = (pi: number, bi: number, val: string) => {
+        const description = [...cvData.projects[pi].description]
+        description[bi] = val
+        updateProj(pi, { description })
+    }
+    const addProjDesc = (pi: number) =>
+        updateProj(pi, { description: [...cvData.projects[pi].description, ''] })
+    const removeProjDesc = (pi: number, bi: number) =>
+        updateProj(pi, { description: cvData.projects[pi].description.filter((_, j) => j !== bi) })
+    const addProj = () =>
+        update({ projects: [...cvData.projects, { name: '', role: '', tech_stack: [], start_date: '', end_date: '', link: null, description: [''] }] })
+    const removeProj = (i: number) =>
+        update({ projects: cvData.projects.filter((_, j) => j !== i) })
 
     // ── Skills ────────────────────────────────────────────────────────────────
 
@@ -374,6 +397,18 @@ export function CVFormBuilder({ cvData, onChange }: CVFormBuilderProps) {
         update({ skill_groups: [...cvData.skill_groups, { category: '', skills: [] }] })
     const removeSkillGroup = (i: number) =>
         update({ skill_groups: cvData.skill_groups.filter((_, j) => j !== i) })
+
+    // ── Awards & Certifications ───────────────────────────────────────────────
+
+    const updateAward = (i: number, patch: Partial<CVAwardsCertification>) => {
+        const aws = [...cvData.awards_certifications]
+        aws[i] = { ...aws[i], ...patch }
+        update({ awards_certifications: aws })
+    }
+    const addAward = () =>
+        update({ awards_certifications: [...cvData.awards_certifications, { title: '', link: null }] })
+    const removeAward = (i: number) =>
+        update({ awards_certifications: cvData.awards_certifications.filter((_, j) => j !== i) })
 
     // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -572,32 +607,44 @@ export function CVFormBuilder({ cvData, onChange }: CVFormBuilderProps) {
 
                                 <div className="grid grid-cols-2 gap-3">
                                     <FieldRow label="Degree">
-                                        <Input value={edu.degree} onChange={(v) => updateEdu(ei, { degree: v })} placeholder="B.Sc. Computer Science" />
+                                        <Input value={edu.degree} onChange={(v) => updateEdu(ei, { degree: v })} placeholder="Bachelor of Science" />
+                                    </FieldRow>
+                                    <FieldRow label="Major / Field">
+                                        <Input value={edu.major} onChange={(v) => updateEdu(ei, { major: v })} placeholder="Computer Science" />
                                     </FieldRow>
                                     <FieldRow label="Institution">
                                         <Input value={edu.institution} onChange={(v) => updateEdu(ei, { institution: v })} placeholder="MIT" />
                                     </FieldRow>
-                                    <FieldRow label="Date Range">
-                                        <Input value={edu.date_range} onChange={(v) => updateEdu(ei, { date_range: v })} placeholder="2016 – 2020" />
+                                    <FieldRow label="Location">
+                                        <Input value={edu.location ?? ''} onChange={(v) => updateEdu(ei, { location: v || null })} placeholder="Cambridge, MA" />
+                                    </FieldRow>
+                                    <FieldRow label="Start Date">
+                                        <Input value={edu.start_date} onChange={(v) => updateEdu(ei, { start_date: v })} placeholder="Sep 2018" />
+                                    </FieldRow>
+                                    <FieldRow label="End Date">
+                                        <Input value={edu.end_date} onChange={(v) => updateEdu(ei, { end_date: v })} placeholder="May 2022" />
+                                    </FieldRow>
+                                    <FieldRow label="GPA">
+                                        <Input value={edu.gpa ?? ''} onChange={(v) => updateEdu(ei, { gpa: v || null })} placeholder="3.8/4.0" />
                                     </FieldRow>
                                 </div>
 
-                                {edu.bullets.length > 0 && (
+                                {edu.honors.length > 0 && (
                                     <div className="flex flex-col gap-1.5">
-                                        <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Notes</span>
-                                        {edu.bullets.map((b, bi) => (
-                                            <div key={bi} className="flex items-start gap-1.5">
-                                                <span className="mt-2.5 w-1 h-1 rounded-full bg-slate-600 shrink-0" />
+                                        <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Honors</span>
+                                        {edu.honors.map((h, bi) => (
+                                            <div key={bi} className="flex items-center gap-1.5">
+                                                <span className="w-1 h-1 rounded-full bg-slate-600 shrink-0" />
                                                 <input
                                                     type="text"
-                                                    value={b}
-                                                    onChange={(e) => updateEduBullet(ei, bi, e.target.value)}
-                                                    placeholder="Achievement or relevant coursework…"
+                                                    value={h}
+                                                    onChange={(e) => updateEduHonor(ei, bi, e.target.value)}
+                                                    placeholder="Dean's List, Valedictorian…"
                                                     className="flex-1 px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/8 text-slate-200 text-xs placeholder:text-slate-700 outline-none focus:border-indigo-500/40 transition-colors"
                                                 />
                                                 <button
                                                     type="button"
-                                                    onClick={() => removeEduBullet(ei, bi)}
+                                                    onClick={() => removeEduHonor(ei, bi)}
                                                     className="w-6 h-6 flex items-center justify-center rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-all duration-200"
                                                 >
                                                     <Trash2 className="w-3 h-3" />
@@ -608,11 +655,108 @@ export function CVFormBuilder({ cvData, onChange }: CVFormBuilderProps) {
                                 )}
                                 <button
                                     type="button"
-                                    onClick={() => addEduBullet(ei)}
+                                    onClick={() => addEduHonor(ei)}
                                     className="flex items-center gap-1 text-[11px] text-indigo-400 hover:text-indigo-300 transition-colors self-start"
                                 >
-                                    <Plus className="w-3 h-3" /> Add note
+                                    <Plus className="w-3 h-3" /> Add honor
                                 </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            {/* ── Projects ──────────────────────────────────────────────────── */}
+            <div>
+                <SectionHeader
+                    icon={<FolderKanban className="w-3.5 h-3.5" />}
+                    title="Projects"
+                    expanded={expanded.projects ?? true}
+                    onToggle={() => toggle('projects')}
+                    onAdd={addProj}
+                    addLabel="Add project"
+                />
+                {(expanded.projects ?? true) && (
+                    <div className="divide-y divide-white/[0.04]">
+                        {cvData.projects.map((proj, pi) => (
+                            <div key={pi} className="p-3 flex flex-col gap-3">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs font-semibold text-slate-400">
+                                        {proj.name || `Project ${pi + 1}`}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => removeProj(pi)}
+                                        className="w-6 h-6 flex items-center justify-center rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-all duration-200"
+                                    >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <FieldRow label="Project Name">
+                                        <Input value={proj.name} onChange={(v) => updateProj(pi, { name: v })} placeholder="My Awesome Project" />
+                                    </FieldRow>
+                                    <FieldRow label="Your Role">
+                                        <Input value={proj.role} onChange={(v) => updateProj(pi, { role: v })} placeholder="Backend Developer" />
+                                    </FieldRow>
+                                    <FieldRow label="Start Date">
+                                        <Input value={proj.start_date} onChange={(v) => updateProj(pi, { start_date: v })} placeholder="Jan 2023" />
+                                    </FieldRow>
+                                    <FieldRow label="End Date">
+                                        <Input value={proj.end_date} onChange={(v) => updateProj(pi, { end_date: v })} placeholder="Present" />
+                                    </FieldRow>
+                                    <FieldRow label="Link (optional)">
+                                        <Input value={proj.link ?? ''} onChange={(v) => updateProj(pi, { link: v || null })} placeholder="https://github.com/…" />
+                                    </FieldRow>
+                                </div>
+
+                                <FieldRow label="Tech Stack (comma-separated)">
+                                    <input
+                                        type="text"
+                                        value={proj.tech_stack.join(', ')}
+                                        onChange={(e) =>
+                                            updateProj(pi, {
+                                                tech_stack: e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
+                                            })
+                                        }
+                                        placeholder="Python, FastAPI, PostgreSQL, Docker"
+                                        className="px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/8 text-slate-200 text-xs placeholder:text-slate-700 outline-none focus:border-indigo-500/40 transition-colors"
+                                    />
+                                </FieldRow>
+
+                                <div className="flex flex-col gap-1.5">
+                                    <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Description</span>
+                                    {proj.description.map((d, bi) => (
+                                        <div key={bi} className="flex items-start gap-1.5">
+                                            <span className="mt-2.5 w-1 h-1 rounded-full bg-slate-600 shrink-0" />
+                                            <textarea
+                                                value={d}
+                                                onChange={(e) => updateProjDesc(pi, bi, e.target.value)}
+                                                placeholder="Action verb + problem solved + measurable result…"
+                                                rows={2}
+                                                className="flex-1 px-3 py-2 rounded-xl bg-white/[0.04] border border-white/8 text-slate-200 text-xs placeholder:text-slate-700 outline-none focus:border-indigo-500/40 transition-colors resize-none leading-relaxed"
+                                            />
+                                            <div className="flex flex-col gap-1 mt-1">
+                                                {d && <AIBtn value={d} onApply={(v) => updateProjDesc(pi, bi, v)} />}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeProjDesc(pi, bi)}
+                                                    className="w-6 h-6 flex items-center justify-center rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-all duration-200"
+                                                >
+                                                    <Trash2 className="w-3 h-3" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    <button
+                                        type="button"
+                                        onClick={() => addProjDesc(pi)}
+                                        className="flex items-center gap-1 text-[11px] text-indigo-400 hover:text-indigo-300 transition-colors mt-1 self-start"
+                                    >
+                                        <Plus className="w-3 h-3" /> Add bullet
+                                    </button>
+                                </div>
                             </div>
                         ))}
                     </div>
@@ -662,6 +806,55 @@ export function CVFormBuilder({ cvData, onChange }: CVFormBuilderProps) {
                                 />
                             </div>
                         ))}
+                    </div>
+                )}
+            </div>
+
+            {/* ── Awards & Certifications ───────────────────────────────────── */}
+            <div>
+                <SectionHeader
+                    icon={<Award className="w-3.5 h-3.5" />}
+                    title="Awards & Certifications"
+                    expanded={expanded.awards ?? true}
+                    onToggle={() => toggle('awards')}
+                    onAdd={addAward}
+                    addLabel="Add award"
+                />
+                {(expanded.awards ?? true) && (
+                    <div className="p-3 flex flex-col gap-2">
+                        {cvData.awards_certifications.map((aw, i) => (
+                            <div key={i} className="flex flex-col gap-2 p-3 rounded-2xl bg-white/[0.02] border border-white/5">
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="text"
+                                        value={aw.title}
+                                        onChange={(e) => updateAward(i, { title: e.target.value })}
+                                        placeholder="AWS Certified Solutions Architect – Associate"
+                                        className="flex-1 px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/8 text-slate-200 text-xs placeholder:text-slate-700 outline-none focus:border-indigo-500/40 transition-colors"
+                                    />
+                                    {aw.title && <AIBtn value={aw.title} onApply={(v) => updateAward(i, { title: v })} />}
+                                    <button
+                                        type="button"
+                                        onClick={() => removeAward(i)}
+                                        className="w-6 h-6 flex items-center justify-center rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-all duration-200"
+                                    >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+                                <input
+                                    type="text"
+                                    value={aw.link ?? ''}
+                                    onChange={(e) => updateAward(i, { link: e.target.value || null })}
+                                    placeholder="https://credly.com/badges/… (optional verify link)"
+                                    className="px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/8 text-slate-200 text-xs placeholder:text-slate-700 outline-none focus:border-indigo-500/40 transition-colors"
+                                />
+                            </div>
+                        ))}
+                        {cvData.awards_certifications.length === 0 && (
+                            <p className="text-[11px] text-slate-600 text-center py-2">
+                                No awards or certifications yet. Click "Add award" to add one.
+                            </p>
+                        )}
                     </div>
                 )}
             </div>

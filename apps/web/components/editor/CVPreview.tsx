@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from 'react'
 import { FileText, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
-import type { CVResumeSchema } from '@/services/api'
+import type { CVResumeSchema, CVProject } from '@/services/api'
 
 interface CVPreviewProps {
     cvData: CVResumeSchema | null
@@ -133,7 +133,7 @@ export function CVPreview({ cvData, pdfUrl, isRendering = false }: CVPreviewProp
 // ─── CV Document renderer ─────────────────────────────────────────────────────
 
 function CVDocument({ cv }: { cv: CVResumeSchema }) {
-    const { personal_info: pi, summary, experiences, education, skill_groups } = cv
+    const { personal_info: pi, summary, experiences, education, projects, skill_groups, awards_certifications } = cv
 
     return (
         <div>
@@ -183,6 +183,16 @@ function CVDocument({ cv }: { cv: CVResumeSchema }) {
                 </section>
             )}
 
+            {/* Projects */}
+            {projects.length > 0 && (
+                <section style={{ marginBottom: 10 }}>
+                    <SectionTitle>Projects</SectionTitle>
+                    {projects.map((proj, i) => (
+                        <ProjectEntry key={i} proj={proj} />
+                    ))}
+                </section>
+            )}
+
             {/* Education */}
             {education.length > 0 && (
                 <section style={{ marginBottom: 10 }}>
@@ -190,14 +200,22 @@ function CVDocument({ cv }: { cv: CVResumeSchema }) {
                     {education.map((edu, i) => (
                         <div key={i} style={{ marginBottom: 7, pageBreakInside: 'avoid' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 1 }}>
-                                <span style={{ fontSize: '9.5pt', fontWeight: 700, color: '#0f172a' }}>{edu.degree}</span>
-                                <span style={{ fontSize: '8.5pt', color: '#64748b', fontStyle: 'italic', marginLeft: 8, whiteSpace: 'nowrap' }}>{edu.date_range}</span>
+                                <span style={{ fontSize: '9.5pt', fontWeight: 700, color: '#0f172a' }}>
+                                    {edu.degree}{edu.major ? ` — ${edu.major}` : ''}
+                                </span>
+                                <span style={{ fontSize: '8.5pt', color: '#64748b', fontStyle: 'italic', marginLeft: 8, whiteSpace: 'nowrap' }}>
+                                    {edu.start_date} – {edu.end_date}
+                                </span>
                             </div>
-                            <div style={{ fontSize: '8.5pt', color: '#475569', fontStyle: 'italic', marginBottom: 3 }}>{edu.institution}</div>
-                            {edu.bullets.length > 0 && (
+                            <div style={{ fontSize: '8.5pt', color: '#475569', fontStyle: 'italic', marginBottom: 3 }}>
+                                {edu.institution}
+                                {edu.location ? ` · ${edu.location}` : ''}
+                                {edu.gpa ? ` · GPA: ${edu.gpa}` : ''}
+                            </div>
+                            {edu.honors.length > 0 && (
                                 <ul style={{ paddingLeft: 14, marginTop: 3 }}>
-                                    {edu.bullets.map((b, j) => (
-                                        <li key={j} style={{ fontSize: '9pt', color: '#334155', marginBottom: 2, lineHeight: 1.42 }}>{b}</li>
+                                    {edu.honors.map((h, j) => (
+                                        <li key={j} style={{ fontSize: '9pt', color: '#334155', marginBottom: 2, lineHeight: 1.42 }}>{h}</li>
                                     ))}
                                 </ul>
                             )}
@@ -208,7 +226,7 @@ function CVDocument({ cv }: { cv: CVResumeSchema }) {
 
             {/* Skills */}
             {skill_groups.length > 0 && (
-                <section>
+                <section style={{ marginBottom: 10 }}>
                     <SectionTitle>Skills</SectionTitle>
                     {skill_groups.map((sg, i) => (
                         <div key={i} style={{ display: 'flex', marginBottom: 3, fontSize: '9pt' }}>
@@ -217,6 +235,81 @@ function CVDocument({ cv }: { cv: CVResumeSchema }) {
                         </div>
                     ))}
                 </section>
+            )}
+
+            {/* Awards & Certifications */}
+            {awards_certifications.length > 0 && (
+                <section>
+                    <SectionTitle>Awards &amp; Certifications</SectionTitle>
+                    {awards_certifications.map((aw, i) => (
+                        <div key={i} style={{ fontSize: '9pt', color: '#334155', marginBottom: 3 }}>
+                            <span style={{ marginRight: 4 }}>·</span>
+                            {aw.title}
+                            {aw.link && (
+                                <a
+                                    href={aw.link}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    style={{ color: '#1d4ed8', fontSize: '8.5pt', marginLeft: 6 }}
+                                >
+                                    [verify ↗]
+                                </a>
+                            )}
+                        </div>
+                    ))}
+                </section>
+            )}
+        </div>
+    )
+}
+
+function ProjectEntry({ proj }: { proj: CVProject }) {
+    return (
+        <div style={{ marginBottom: 7, pageBreakInside: 'avoid' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 1 }}>
+                <span style={{ fontSize: '9.5pt', fontWeight: 700, color: '#0f172a' }}>
+                    {proj.name}
+                    {proj.link && (
+                        <a
+                            href={proj.link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ fontSize: '8pt', fontWeight: 400, color: '#1d4ed8', marginLeft: 6 }}
+                        >
+                            ↗
+                        </a>
+                    )}
+                </span>
+                <span style={{ fontSize: '8.5pt', color: '#64748b', fontStyle: 'italic', marginLeft: 8, whiteSpace: 'nowrap' }}>
+                    {proj.start_date} – {proj.end_date}
+                </span>
+            </div>
+            <div style={{ fontSize: '8.5pt', color: '#475569', fontStyle: 'italic', marginBottom: 3 }}>{proj.role}</div>
+            {proj.tech_stack.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 4px', marginBottom: 4 }}>
+                    {proj.tech_stack.map((t) => (
+                        <span
+                            key={t}
+                            style={{
+                                fontSize: '7.5pt',
+                                color: '#1d4ed8',
+                                background: 'rgba(29,78,216,0.07)',
+                                border: '0.5pt solid rgba(29,78,216,0.2)',
+                                borderRadius: 3,
+                                padding: '1pt 4pt',
+                            }}
+                        >
+                            {t}
+                        </span>
+                    ))}
+                </div>
+            )}
+            {proj.description.length > 0 && (
+                <ul style={{ paddingLeft: 14, marginTop: 3 }}>
+                    {proj.description.map((b, j) => (
+                        <li key={j} style={{ fontSize: '9pt', color: '#334155', marginBottom: 2, lineHeight: 1.42 }}>{b}</li>
+                    ))}
+                </ul>
             )}
         </div>
     )

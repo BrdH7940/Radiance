@@ -62,7 +62,7 @@ class Experience(BaseModel):
     company: str = Field(description="Full company or organisation name.")
     role: str = Field(description="Exact job title / position held.")
     date_range: str = Field(
-        description="Employment period in the format 'Mon YYYY – Mon YYYY' or 'Mon YYYY – Present', e.g. 'Jan 2020 – Dec 2022'."
+        description="Employment period, e.g. 'Jan 2020 – Dec 2022' or 'Mar 2023 – Present'."
     )
     bullets: List[str] = Field(
         default_factory=list,
@@ -76,18 +76,53 @@ class Experience(BaseModel):
 
 
 class Education(BaseModel):
-    """A formal education entry (university, bootcamp, certification, etc.)."""
+    """A formal education entry (university, bootcamp, certification programme, etc.)."""
 
-    institution: str = Field(description="Full name of the university, school, or issuing body.")
+    institution: str = Field(description="Full name of the university, school, or issuing organisation.")
     degree: str = Field(
-        description="Degree and field of study, e.g. 'B.Sc. Computer Science' or 'AWS Certified Solutions Architect'."
+        description="Degree level or credential type, e.g. 'Bachelor of Science', 'Master of Engineering', 'Professional Certificate'."
     )
-    date_range: str = Field(
-        description="Study period, e.g. '2016 – 2020' or 'Jun 2023'. Preserve exactly from the original."
+    major: str = Field(
+        description="Field of study or specialisation, e.g. 'Computer Science', 'Electrical Engineering'."
     )
-    bullets: List[str] = Field(
+    start_date: str = Field(description="Start date, e.g. 'Sep 2018' or '2018'.")
+    end_date: str = Field(description="End date or 'Present', e.g. 'May 2022' or '2022'.")
+    location: Optional[str] = Field(
+        default=None,
+        description="City and country/state of the institution, e.g. 'Cambridge, MA'. Preserve from original CV.",
+    )
+    gpa: Optional[str] = Field(
+        default=None,
+        description="GPA or grade if stated in the original CV, e.g. '3.8/4.0' or '8.5/10'. Do NOT invent.",
+    )
+    honors: List[str] = Field(
         default_factory=list,
-        description="Optional: notable academic achievements, honours, or highly relevant coursework.",
+        description="Academic honours, awards, or highly relevant coursework, e.g. \"Dean's List\", 'Valedictorian'.",
+    )
+
+
+class Project(BaseModel):
+    """A personal, academic, or open-source project."""
+
+    name: str = Field(description="Project name.")
+    role: str = Field(
+        description="Candidate's role in the project, e.g. 'Backend Developer', 'Project Lead', 'Solo Developer'."
+    )
+    tech_stack: List[str] = Field(
+        description="Key technologies, languages, and frameworks used, e.g. ['Python', 'FastAPI', 'PostgreSQL', 'Docker']."
+    )
+    start_date: str = Field(description="Project start date, e.g. 'Jan 2023' or '2023'.")
+    end_date: str = Field(description="End date or 'Present'.")
+    link: Optional[str] = Field(
+        default=None,
+        description="URL to the GitHub repo, live demo, case study, or any publicly verifiable artefact.",
+    )
+    description: List[str] = Field(
+        default_factory=list,
+        description=(
+            "STAR-style bullet points describing the problem, solution, and measurable outcome. "
+            "Each bullet: one dense sentence, action verb first, quantified result where possible."
+        ),
     )
 
 
@@ -99,6 +134,18 @@ class SkillGroup(BaseModel):
     )
     skills: List[str] = Field(
         description="Ordered list of specific skills (most relevant to the JD first), e.g. ['Python', 'Go', 'TypeScript']."
+    )
+
+
+class AwardsAndCertification(BaseModel):
+    """An award, scholarship, honour, or professional certification."""
+
+    title: str = Field(
+        description="Full name of the award, scholarship, or certification, e.g. 'AWS Certified Solutions Architect – Associate'."
+    )
+    link: Optional[str] = Field(
+        default=None,
+        description="URL to the online certificate, badge, or verification page (e.g. Credly, Coursera).",
     )
 
 
@@ -123,9 +170,17 @@ class CVResumeSchema(BaseModel):
     )
     education: List[Education] = Field(
         default_factory=list,
-        description="Education entries in reverse chronological order.",
+        description="Education entries in reverse chronological order. Preserve all details exactly from the original CV.",
+    )
+    projects: List[Project] = Field(
+        default_factory=list,
+        description="Notable personal, academic, or open-source projects. Include only those relevant to the target JD.",
     )
     skill_groups: List[SkillGroup] = Field(
         default_factory=list,
         description="Grouped skills. Reorder categories and individual skills so JD-relevant ones appear first.",
+    )
+    awards_certifications: List[AwardsAndCertification] = Field(
+        default_factory=list,
+        description="Awards, scholarships, honours, and professional certifications from the original CV.",
     )

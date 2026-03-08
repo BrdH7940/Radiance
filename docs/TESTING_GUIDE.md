@@ -7,7 +7,7 @@ Quick commands to verify each component. Run from project root unless noted.
 ## Prerequisites
 
 ```bash
-# Backend: Python 3.11+, pdflatex, env vars
+# Backend: Python 3.11+, WeasyPrint (system deps via Docker), env vars
 # Frontend: Node 18+
 ```
 
@@ -72,24 +72,25 @@ curl -X POST http://localhost:8000/api/v1/analyses \
 
 ```bash
 curl http://localhost:8000/api/v1/analyses/<job_id>
-# Expect: status (queued|processing|completed|failed), result when completed
+# Expect: status (queued|processing|completed|failed)
+# When completed: result.enhanced_cv_json (structured CV), result.pdf_url
 ```
 
-### Editor Refinements (Phase 4)
+### Editor Refinements (plain-text AI rewrite)
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/editor/refinements \
   -H "Content-Type: application/json" \
   -d '{"selected_text":"Led migration of monolithic service.","prompt":"Make it STAR format"}'
-# Expect: {"new_text":"..."}
+# Expect: {"new_text":"..."} — plain text, no LaTeX
 ```
 
-### Editor Renders (Phase 4)
+### Editor Renders (JSON → PDF via WeasyPrint)
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/editor/renders \
   -H "Content-Type: application/json" \
-  -d '{"latex_code":"\\documentclass{article}\\begin{document}Hello\\end{document}"}'
+  -d '{"cv_data":{"personal_info":{"name":"Test","email":"test@example.com","links":[]},"summary":{"text":"Summary."},"experiences":[],"education":[],"skill_groups":[]}}'
 # Expect: {"pdf_url":"https://...","success":true}
 ```
 
@@ -109,10 +110,11 @@ Open http://localhost:3000
 | Flow                  | Steps                                                                                               |
 | --------------------- | --------------------------------------------------------------------------------------------------- |
 | Upload → Dashboard    | Upload PDF, paste JD (50+ chars), click "Analyze & Enhance CV" → overlay → redirect to `/dashboard` |
-| Dashboard → Workspace | Click "Enhance with AI" → `/workspace` with LaTeX + PDF                                             |
-| AI Edit               | Select text in editor → click Zap icon → enter prompt → "Generate" → text replaced                  |
-| Compile PDF           | Click "Compile PDF" → iframe shows compiled PDF                                                     |
-| Download PDF          | After compile, click "PDF" → download starts                                                        |
+| Dashboard → Workspace | Click "Enhance with AI" → `/workspace` with Form Builder + live HTML preview                        |
+| AI Rewrite (per field)| Click ✨ icon next to any text field → enter prompt → "Go" → field content replaced                 |
+| Render PDF            | Click "Render PDF" → PDF iframe appears after server renders JSON → HTML → PDF                     |
+| Download JSON         | Click "JSON" → downloads `cv-data.json`                                                            |
+| Download PDF          | After render, click "PDF" → download starts                                                        |
 
 ---
 
@@ -122,22 +124,35 @@ Open http://localhost:3000
 [ ] Backend /health returns 200
 [ ] POST /resumes/upload-urls returns presigned URL
 [ ] POST /analyses returns job id
-[ ] GET /analyses/{id} eventually returns status=completed
-[ ] POST /editor/refinements returns new_text
-[ ] POST /editor/renders returns pdf_url (requires pdflatex)
+[ ] GET /analyses/{id} eventually returns status=completed with enhanced_cv_json
+[ ] POST /editor/refinements returns new_text (plain text)
+[ ] POST /editor/renders returns pdf_url (requires WeasyPrint in Docker)
 [ ] Frontend: Upload → Dashboard → Workspace
-[ ] Frontend: AI edit replaces selection
-[ ] Frontend: Compile shows PDF in iframe
+[ ] Frontend: Form builder edits update live preview in real time
+[ ] Frontend: AI Rewrite (✨) updates field content
+[ ] Frontend: Render PDF shows PDF in iframe
 ```
 
 ---
 
-## 5. Troubleshooting
+## 5. Testing New Migration Features (JSON + HTML → PDF)
+
+| Feature | How to test |
+|---------|-------------|
+| **Structured CV output** | Poll job until completed → `result.enhanced_cv_json` has `personal_info`, `experiences`, `education`, `skill_groups` |
+| **Form Builder** | Workspace: add/remove experience, bullet, skill group; edit any field → right pane updates in real time |
+| **AI Rewrite per field** | Click ✨ next to a bullet or summary → enter "Make it STAR format" → "Go" → field content replaced |
+| **Render PDF** | Click "Render PDF" → wait ~5–10s → PDF appears in iframe; download via "PDF" button |
+| **Export JSON** | Click "JSON" → file `cv-data.json` downloads with full CV schema |
+
+---
+
+## 6. Troubleshooting
 
 | Issue                 | Check                                                      |
 | --------------------- | ---------------------------------------------------------- |
 | CORS errors           | Backend `allow_origins=["*"]` in main.py                   |
 | 422 on analyses       | JD must be ≥50 chars                                       |
 | Refinements 500       | `GOOGLE_API_KEY` set                                       |
-| Renders success=false | `pdflatex` on PATH (`which pdflatex`)                      |
+| Renders success=false | WeasyPrint in Docker (check `docker build`; no pdflatex needed) |
 | S3 upload fails       | AWS creds + bucket exist; CORS on bucket for presigned PUT |

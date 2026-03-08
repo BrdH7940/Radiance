@@ -103,7 +103,6 @@ ENHANCER_HUMAN_PROMPT: str = """\
 - Write exactly 3 sentences:
   1. Role title + total years of experience + core specialisation area.
   2. Two or three key technical strengths most aligned with the target JD (use JD keywords).
-  3. One powerful, quantified career highlight with real numbers from the original CV.
 
 ### experiences (highest priority — STAR method)
 - List all positions from the original CV in reverse chronological order.
@@ -116,15 +115,27 @@ ENHANCER_HUMAN_PROMPT: str = """\
 - Preserve company names, role titles, and date ranges exactly from the original CV.
 
 ### education
-- Copy all education entries from the original CV exactly (institution, degree, date_range).
-- Do NOT invent or alter education details.
-- bullets: include only notable honours or directly relevant coursework, or leave empty.
+- Copy all education entries from the original CV in reverse chronological order.
+- institution, degree, major, start_date, end_date, location, gpa: PRESERVE EXACTLY from the original — do NOT invent any field.
+- honors: include only Dean's List, Valedictorian, scholarships, or similar academic distinctions stated in the original CV; leave empty otherwise.
+
+### projects
+- Include projects that are relevant to the target JD. Skip unrelated or trivial projects.
+- name, role, tech_stack, start_date, end_date, link: preserve from original CV.
+- description: rewrite as STAR-style bullets — problem, solution, measurable outcome. Action verb first.
+- tech_stack: list the key technologies actually used (do NOT pad with JD keywords not in the original).
 
 ### skill_groups
 - Group skills into meaningful categories (e.g. Programming Languages, Cloud & DevOps, Databases, Frameworks, Tools).
 - Re-order to place the most JD-relevant skills first within each group and first among groups.
 - Where skill gaps exist and evidence is present in the CV, surface that evidence in experience bullets.
 - Remove unsupported buzz-word skills that have no backing in the experience section.
+
+### awards_certifications
+- Copy all awards, scholarships, honours, and professional certifications from the original CV.
+- title: full official name, e.g. 'AWS Certified Solutions Architect – Associate'.
+- link: preserve verification URL if present in the original; otherwise null.
+- Do NOT fabricate certifications.
 
 ### Addressing Red Flags
 - Employment gaps: add a brief, honest context phrase in the relevant experience bullet if appropriate.

@@ -72,7 +72,7 @@
       line-height: 1.55;
     }
 
-    /* ── Experience / Education entries ──────────────────────────────────── */
+    /* ── Generic entry ───────────────────────────────────────────────────── */
     .entry {
       margin-bottom: 7pt;
       page-break-inside: avoid;
@@ -118,6 +118,24 @@
       line-height: 1.42;
     }
 
+    /* ── Project tech stack pills ────────────────────────────────────────── */
+    .tech-stack {
+      font-size: 8pt;
+      color: #475569;
+      margin-bottom: 3pt;
+    }
+
+    .tech-stack span {
+      display: inline-block;
+      background: rgba(29, 78, 216, 0.07);
+      border: 0.5pt solid rgba(29, 78, 216, 0.2);
+      color: #1d4ed8;
+      border-radius: 3pt;
+      padding: 0.5pt 4pt;
+      margin-right: 3pt;
+      margin-bottom: 2pt;
+    }
+
     /* ── Skills ──────────────────────────────────────────────────────────── */
     .skill-row {
       display: flex;
@@ -134,6 +152,19 @@
 
     .skill-list {
       color: #475569;
+    }
+
+    /* ── Awards ──────────────────────────────────────────────────────────── */
+    .award-row {
+      font-size: 9pt;
+      color: #334155;
+      margin-bottom: 3pt;
+    }
+
+    .award-row a {
+      color: #1d4ed8;
+      text-decoration: none;
+      font-size: 8.5pt;
     }
   </style>
 </head>
@@ -189,6 +220,41 @@
   </section>
   {% endif %}
 
+  <!-- ── Projects ────────────────────────────────────────────────────────── -->
+  {% if cv.projects %}
+  <section>
+    <h2>Projects</h2>
+    {% for proj in cv.projects %}
+    <div class="entry">
+      <div class="entry-header">
+        <span class="entry-title">
+          {{ proj.name }}
+          {% if proj.link %}
+            <a href="{{ proj.link }}" style="font-size:8pt; font-weight:400; color:#1d4ed8; margin-left:4pt;">↗ link</a>
+          {% endif %}
+        </span>
+        <span class="entry-date">{{ proj.start_date }} – {{ proj.end_date }}</span>
+      </div>
+      <div class="entry-subtitle">{{ proj.role }}</div>
+      {% if proj.tech_stack %}
+      <div class="tech-stack">
+        {% for tech in proj.tech_stack %}
+        <span>{{ tech }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% if proj.description %}
+      <ul>
+        {% for bullet in proj.description %}
+        <li>{{ bullet }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </section>
+  {% endif %}
+
   <!-- ── Education ───────────────────────────────────────────────────────── -->
   {% if cv.education %}
   <section>
@@ -196,14 +262,18 @@
     {% for edu in cv.education %}
     <div class="entry">
       <div class="entry-header">
-        <span class="entry-title">{{ edu.degree }}</span>
-        <span class="entry-date">{{ edu.date_range }}</span>
+        <span class="entry-title">{{ edu.degree }} — {{ edu.major }}</span>
+        <span class="entry-date">{{ edu.start_date }} – {{ edu.end_date }}</span>
       </div>
-      <div class="entry-subtitle">{{ edu.institution }}</div>
-      {% if edu.bullets %}
+      <div class="entry-subtitle">
+        {{ edu.institution }}
+        {% if edu.location %} · {{ edu.location }}{% endif %}
+        {% if edu.gpa %} · GPA: {{ edu.gpa }}{% endif %}
+      </div>
+      {% if edu.honors %}
       <ul>
-        {% for bullet in edu.bullets %}
-        <li>{{ bullet }}</li>
+        {% for honor in edu.honors %}
+        <li>{{ honor }}</li>
         {% endfor %}
       </ul>
       {% endif %}
@@ -220,6 +290,21 @@
     <div class="skill-row">
       <span class="skill-category">{{ group.category }}:</span>
       <span class="skill-list">{{ group.skills | join(', ') }}</span>
+    </div>
+    {% endfor %}
+  </section>
+  {% endif %}
+
+  <!-- ── Awards & Certifications ─────────────────────────────────────────── -->
+  {% if cv.awards_certifications %}
+  <section>
+    <h2>Awards &amp; Certifications</h2>
+    {% for award in cv.awards_certifications %}
+    <div class="award-row">
+      <span>{{ award.title }}</span>
+      {% if award.link %}
+        <a href="{{ award.link }}">[verify ↗]</a>
+      {% endif %}
     </div>
     {% endfor %}
   </section>
