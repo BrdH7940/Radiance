@@ -5,6 +5,9 @@ import type React from 'react'
 import { FileSearch } from 'lucide-react'
 import { useCVStore } from '@/store/useCVStore'
 
+// Set to true, paste content, then check browser console (F12) and share the output
+const DEBUG_PASTE = false
+
 const PLACEHOLDER = `Paste the full job description here…
 
 Example:
@@ -32,21 +35,60 @@ export function JDTextarea() {
             )
         )
 
+        if (DEBUG_PASTE) {
+            const plainText = e.clipboardData.getData('text/plain')
+            console.log('[JDTextarea DEBUG] === Clipboard structure ===')
+            console.log(
+                '[JDTextarea DEBUG] Raw HTML (first 2000 chars):',
+                html.slice(0, 2000)
+            )
+            console.log('[JDTextarea DEBUG] Plain text:', plainText)
+            console.log(
+                '[JDTextarea DEBUG] Blocks found:',
+                blocks.map((el, i) => ({
+                    i,
+                    tag: el.tagName,
+                    text:
+                        el.textContent?.slice(0, 80) +
+                        (el.textContent && el.textContent.length > 80
+                            ? '...'
+                            : ''),
+                }))
+            )
+        }
+
         // If there is no recognizable structure, fall back to default paste behavior.
         if (blocks.length === 0) return
 
         e.preventDefault()
 
         const lines: string[] = []
+        const lastTags: string[] = [] // Track tag of each line for merge logic
 
         for (const el of blocks) {
-            const text = el.textContent?.trim()
+            // Normalize: replace newlines within block with space (source apps embed line-wrap newlines)
+            const text = el.textContent?.trim().replace(/\s*\n\s*/g, ' ').trim()
             if (!text) continue
 
             if (el.tagName === 'LI') {
                 lines.push(`• ${text}`)
+                lastTags.push('LI')
             } else {
-                lines.push('\n' + text)
+                // Merge consecutive <p> blocks that are part of the same logical paragraph.
+                // Word/Google Docs often split wrapped lines into separate <p> tags.
+                const prevWasP = lastTags[lastTags.length - 1] === 'P'
+                const isContinuation =
+                    el.tagName === 'P' &&
+                    prevWasP &&
+                    lines.length > 0 &&
+                    /[,\;:]\s*$/.test(lines[lines.length - 1])
+
+                if (isContinuation) {
+                    lines[lines.length - 1] += ' ' + text
+                } else {
+                    lines.push((lines.length > 0 ? '\n' : '') + text)
+                    lastTags.push(el.tagName)
+                }
             }
         }
 
