@@ -35,13 +35,13 @@ from infrastructure.adapters.in_memory_job_repository import InMemoryJobReposito
 from infrastructure.adapters.weasyprint_pdf_adapter import WeasyPrintPDFAdapter
 from infrastructure.parsers.docling_adapter import DoclingParser
 from infrastructure.storage.s3_storage import S3StorageAdapter
+from infrastructure.adapters.dynamo_job_repository import DynamoJobRepository
+from infrastructure.adapters.sqs_service import SQSService
 
 logger = logging.getLogger(__name__)
 
 # Absolute path to the Jinja2 HTML templates directory.
-_TEMPLATES_DIR = str(
-    Path(__file__).parent / "infrastructure" / "templates"
-)
+_TEMPLATES_DIR = str(Path(__file__).parent / "infrastructure" / "templates")
 
 
 # ---------------------------------------------------------------------------
@@ -77,9 +77,7 @@ def get_document_parser() -> DoclingParser:
 def get_llm_service() -> ILLMService:
     """Singleton GeminiLLMAdapter (Analyzer → Enhancer LangGraph graph)."""
     settings: AppSettings = get_settings()
-    logger.info(
-        "Initialising GeminiLLMAdapter (model: '%s')…", settings.gemini_model
-    )
+    logger.info("Initialising GeminiLLMAdapter (model: '%s')…", settings.gemini_model)
     return GeminiLLMAdapter(
         api_key=settings.google_api_key,
         model=settings.gemini_model,
@@ -90,15 +88,20 @@ def get_llm_service() -> ILLMService:
 def get_job_repository() -> IJobRepository:
     """Singleton InMemoryJobRepository — swap for DynamoDBJobRepository in prod."""
     logger.info("Initialising InMemoryJobRepository…")
-    return InMemoryJobRepository()
+    return DynamoJobRepository(table_name="analysis_jobs")
+
+
+@lru_cache(maxsize=1)
+def get_sqs_service() -> SQSService:
+    """Singleton SQSService for sending jobs to SQS."""
+    logger.info("Initialising SQSService…")
+    return SQSService()
 
 
 @lru_cache(maxsize=1)
 def get_pdf_renderer() -> IPDFRenderService:
     """Singleton WeasyPrintPDFAdapter backed by Jinja2 HTML template."""
-    logger.info(
-        "Initialising WeasyPrintPDFAdapter (templates: '%s')…", _TEMPLATES_DIR
-    )
+    logger.info("Initialising WeasyPrintPDFAdapter (templates: '%s')…", _TEMPLATES_DIR)
     return WeasyPrintPDFAdapter(template_dir=_TEMPLATES_DIR)
 
 

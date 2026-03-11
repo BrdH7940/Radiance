@@ -20,11 +20,12 @@ from uuid import uuid4
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from container import get_analyze_cv_use_case, get_job_repository
+from container import get_analyze_cv_use_case, get_job_repository, get_sqs_service
 from core.domain.analysis_job import AnalysisJob, AnalysisResult, JobStatus, RedFlag
 from core.ports.job_repository_port import IJobRepository
 from core.use_cases.analyze_cv_use_case import AnalyzeCVUseCase
 from domain.models import SkillGap
+from infrastructure.adapters.sqs_service import SQSService
 
 logger = logging.getLogger(__name__)
 
@@ -113,8 +114,7 @@ router = APIRouter(prefix="/api/v1/analyses", tags=["Analyses"])
 )
 async def create_analysis(
     payload: CreateAnalysisRequest,
-    background_tasks: BackgroundTasks,
-    use_case: AnalyzeCVUseCase = Depends(get_analyze_cv_use_case),
+    sqs_service: SQSService = Depends(get_sqs_service),
     job_repo: IJobRepository = Depends(get_job_repository),
 ) -> CreateAnalysisResponse:
     """Queue a new CV analysis job and immediately return the job ID."""
@@ -131,16 +131,9 @@ async def create_analysis(
     )
     await job_repo.save(job)
 
-    background_tasks.add_task(
-        use_case.execute,
-        job_id=job_id,
-        s3_key=payload.s3_key,
-        jd_text=payload.jd_text,
-    )
+    sqs_service.send_job(job_id, payload.s3_key, payload.jd_text)
 
-    logger.info(
-        "Analysis job '%s' queued for S3 key '%s'.", job_id, payload.s3_key
-    )
+    logger.info("Analysis job '%s' queued for S3 key '%s'.", job_id, payload.s3_key)
     return CreateAnalysisResponse(id=job_id, status=JobStatus.QUEUED)
 
 
