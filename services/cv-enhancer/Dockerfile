@@ -48,3 +48,5 @@ CMD ["uvicorn", "main:app", \
      "--port", "8000", \
      "--app-dir", "/app/src", \
      "--reload"]
+
+CMD ["main:handler"]

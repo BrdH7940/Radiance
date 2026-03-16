@@ -31,7 +31,6 @@ from core.use_cases.analyze_cv_use_case import AnalyzeCVUseCase
 from domain.ports import IStorageService
 from infrastructure.adapters.editor_ai_gemini_adapter import EditorAIGeminiAdapter
 from infrastructure.adapters.gemini_llm_adapter import GeminiLLMAdapter
-from infrastructure.adapters.in_memory_job_repository import InMemoryJobRepository
 from infrastructure.adapters.weasyprint_pdf_adapter import WeasyPrintPDFAdapter
 from infrastructure.parsers.docling_adapter import DoclingParser
 from infrastructure.storage.s3_storage import S3StorageAdapter
@@ -86,16 +85,18 @@ def get_llm_service() -> ILLMService:
 
 @lru_cache(maxsize=1)
 def get_job_repository() -> IJobRepository:
-    """Singleton InMemoryJobRepository — swap for DynamoDBJobRepository in prod."""
-    logger.info("Initialising InMemoryJobRepository…")
-    return DynamoJobRepository(table_name="analysis_jobs")
+    """Singleton DynamoJobRepository — shared, persistent job store."""
+    settings: AppSettings = get_settings()
+    logger.info("Initialising DynamoJobRepository (table: '%s')…", settings.dynamodb_table_name)
+    return DynamoJobRepository(table_name=settings.dynamodb_table_name)
 
 
 @lru_cache(maxsize=1)
 def get_sqs_service() -> SQSService:
     """Singleton SQSService for sending jobs to SQS."""
-    logger.info("Initialising SQSService…")
-    return SQSService()
+    settings: AppSettings = get_settings()
+    logger.info("Initialising SQSService (queue: '%s')…", settings.sqs_queue_url)
+    return SQSService(queue_url=settings.sqs_queue_url)
 
 
 @lru_cache(maxsize=1)

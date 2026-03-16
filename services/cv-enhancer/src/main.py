@@ -2,6 +2,8 @@
 FastAPI application entry point for the CV Enhancer microservice.
 """
 
+import asyncio
+import json
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -9,6 +11,7 @@ from contextlib import asynccontextmanager
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from mangum import Mangum
 
 from presentation.analyses import router as analyses_router
 from presentation.editor import router as editor_router
@@ -95,6 +98,60 @@ app.include_router(editor_router)    # POST /api/v1/editor/refinements  |  /rend
 @app.get("/health", tags=["Health"], summary="Liveness probe")
 async def health_check() -> dict:
     return {"status": "healthy", "service": "cv-enhancer", "version": "2.0.0"}
+
+
+# ---------------------------------------------------------------------------
+# AWS Lambda Integration
+# ---------------------------------------------------------------------------
+
+# Mangum handler dành cho HTTP requests.
+# lifespan="on" giúp Mangum gọi hàm lifespan của FastAPI khi Lambda khởi động.
+mangum_handler = Mangum(app, lifespan="on")
+
+
+async def process_sqs_records(event: dict) -> None:
+    """Xử lý danh sách các tin nhắn từ SQS."""
+    from container import get_analyze_cv_use_case
+
+    use_case = get_analyze_cv_use_case()
+
+    for record in event.get("Records", []):
+        try:
+            body = json.loads(record["body"])
+            job_id = body.get("job_id")
+            s3_key = body.get("s3_key")
+            jd_text = body.get("jd_text")
+
+            logger.info("Worker processing Job ID: %s", job_id)
+
+            await use_case.execute(
+                job_id=job_id,
+                s3_key=s3_key,
+                jd_text=jd_text,
+            )
+
+            logger.info("Successfully processed Job ID: %s", job_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "Error processing SQS record: %s", str(exc), exc_info=True
+            )
+            # Ném exception để SQS hiểu là fail và tự retry theo policy.
+            raise
+
+
+def handler(event, context):
+    """
+    AWS Lambda Entry Point.
+    Phân loại event để điều hướng sang FastAPI (HTTP) hoặc SQS Processor.
+    """
+    # Nếu event chứa key "Records", đó là sự kiện từ SQS.
+    if isinstance(event, dict) and "Records" in event:
+        # Vì Lambda handler là đồng bộ, ta dùng loop để chạy async logic.
+        loop = asyncio.get_event_loop()
+        return loop.run_until_complete(process_sqs_records(event))
+
+    # Ngược lại, đó là HTTP request (API Gateway hoặc Lambda Function URL).
+    return mangum_handler(event, context)
 
 
 # ---------------------------------------------------------------------------

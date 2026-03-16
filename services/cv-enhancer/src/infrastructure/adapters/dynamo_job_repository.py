@@ -27,3 +27,12 @@ class DynamoJobRepository(IJobRepository):
         except ClientError as e:
             print(f"Error getting from DynamoDB: {e.response['Error']['Message']}")
             raise
+
+    async def update(self, job: AnalysisJob) -> None:
+        # Ghi đè (upsert) toàn bộ record theo id.
+        item = job.model_dump(mode="json")
+        try:
+            self.table.put_item(Item=item)
+        except ClientError as e:
+            print(f"Error updating DynamoDB: {e.response['Error']['Message']}")
+            raise

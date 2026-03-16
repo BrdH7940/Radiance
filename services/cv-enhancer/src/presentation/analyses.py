@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 
 class CreateAnalysisRequest(BaseModel):
-    """Input for triggering an async CV analysis job."""
+    """Input for triggering an async CV analysis job via SQS."""
 
     s3_key: str = Field(
         ...,
@@ -107,8 +107,9 @@ router = APIRouter(prefix="/api/v1/analyses", tags=["Analyses"])
     status_code=status.HTTP_202_ACCEPTED,
     summary="Trigger an async CV analysis and enhancement job",
     description=(
-        "Creates a new analysis job and dispatches it as a FastAPI BackgroundTask. "
-        "Returns 202 Accepted with a job ID immediately. "
+        "Creates a new analysis job, persists it to DynamoDB, "
+        "and enqueues a message to Amazon SQS for a separate worker Lambda "
+        "to process. Returns 202 Accepted with a job ID immediately. "
         "Poll GET /api/v1/analyses/{id} to check progress."
     ),
 )

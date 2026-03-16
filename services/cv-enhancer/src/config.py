@@ -46,6 +46,10 @@ class AppSettings(BaseSettings):
         default=3600, alias="AWS_S3_PRESIGNED_DOWNLOAD_EXPIRATION_SECONDS"
     )
 
+    # ── DynamoDB & SQS settings ────────────────────────────────────────────────
+    dynamodb_table_name: str = Field(alias="DYNAMODB_ANALYSIS_TABLE_NAME")
+    sqs_queue_url: str = Field(alias="SQS_QUEUE_URL")
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> AppSettings:
