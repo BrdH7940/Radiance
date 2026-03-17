@@ -3,8 +3,8 @@ import json
 
 
 class SQSService:
-    def __init__(self, queue_url: str):
-        self.sqs = boto3.client("sqs")
+    def __init__(self, queue_url: str, region_name: str, endpoint_url: str | None = None):
+        self.sqs = boto3.client("sqs", region_name=region_name, endpoint_url=endpoint_url)
         self.queue_url = queue_url
 
     def send_job(self, job_id: str, s3_key: str, jd_text: str):

@@ -48,7 +48,12 @@ class AppSettings(BaseSettings):
 
     # ── DynamoDB & SQS settings ────────────────────────────────────────────────
     dynamodb_table_name: str = Field(alias="DYNAMODB_ANALYSIS_TABLE_NAME")
+    dynamodb_endpoint_url: Optional[str] = Field(
+        default=None, alias="DYNAMODB_ENDPOINT_URL"
+    )
+    analysis_user_id: str = Field(default="local", alias="ANALYSIS_USER_ID")
     sqs_queue_url: str = Field(alias="SQS_QUEUE_URL")
+    sqs_endpoint_url: Optional[str] = Field(default=None, alias="SQS_ENDPOINT_URL")
 
 
 @lru_cache(maxsize=1)

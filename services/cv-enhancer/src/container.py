@@ -88,7 +88,12 @@ def get_job_repository() -> IJobRepository:
     """Singleton DynamoJobRepository — shared, persistent job store."""
     settings: AppSettings = get_settings()
     logger.info("Initialising DynamoJobRepository (table: '%s')…", settings.dynamodb_table_name)
-    return DynamoJobRepository(table_name=settings.dynamodb_table_name)
+    return DynamoJobRepository(
+        table_name=settings.dynamodb_table_name,
+        region_name=settings.aws_region,
+        endpoint_url=getattr(settings, "dynamodb_endpoint_url", None),
+        user_id=settings.analysis_user_id,
+    )
 
 
 @lru_cache(maxsize=1)
@@ -96,7 +101,11 @@ def get_sqs_service() -> SQSService:
     """Singleton SQSService for sending jobs to SQS."""
     settings: AppSettings = get_settings()
     logger.info("Initialising SQSService (queue: '%s')…", settings.sqs_queue_url)
-    return SQSService(queue_url=settings.sqs_queue_url)
+    return SQSService(
+        queue_url=settings.sqs_queue_url,
+        region_name=settings.aws_region,
+        endpoint_url=getattr(settings, "sqs_endpoint_url", None),
+    )
 
 
 @lru_cache(maxsize=1)
