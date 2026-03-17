@@ -49,4 +49,3 @@ CMD ["uvicorn", "main:app", \
      "--app-dir", "/app/src", \
      "--reload"]
 
-CMD ["main:handler"]
