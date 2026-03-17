@@ -2,6 +2,7 @@
 fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
 python-multipart>=0.0.12
+Mangum>=0.17.0
 
 # ── Data Validation & Settings ─────────────────────────────────────────────────
 pydantic>=2.9.0
@@ -19,6 +20,7 @@ google-generativeai>=0.8.0
 
 # ── Cloud Storage ──────────────────────────────────────────────────────────────
 boto3>=1.35.0
+botocore>=1.35.0
 
 # ── HTML Templating & PDF Generation ──────────────────────────────────────────
 jinja2>=3.1.0

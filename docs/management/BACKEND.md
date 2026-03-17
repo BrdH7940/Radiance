@@ -41,7 +41,7 @@ services/cv-enhancer/src/
 │   │   ├── llm_port.py        # ILLMService
 │   │   ├── job_repository_port.py
 │   │   ├── editor_ai_port.py
-│   │   └── latex_compiler_port.py
+│   │   └── pdf_render_port.py # IPDFRenderService (WeasyPrint pipeline)
 │   ├── prompts/
 │   │   └── cv_analysis_prompt.py
 │   └── use_cases/
@@ -50,14 +50,18 @@ services/cv-enhancer/src/
 │   ├── adapters/
 │   │   ├── gemini_llm_adapter.py
 │   │   ├── editor_ai_gemini_adapter.py
-│   │   ├── in_memory_job_repository.py
-│   │   └── latex_compiler_adapter.py
+│   │   ├── in_memory_job_repository.py      # Legacy dev-only repo
+│   │   ├── dynamo_job_repository.py         # Production job repo (DynamoDB)
+│   │   ├── sqs_service.py                   # SQS producer for async jobs (optional)
+│   │   ├── latex_compiler_adapter.py        # Legacy LaTeX pipeline
+│   │   └── weasyprint_pdf_adapter.py        # HTML → PDF (WeasyPrint) renderer
 │   ├── parsers/
 │   │   └── docling_adapter.py
 │   ├── storage/
 │   │   └── s3_storage.py
 │   └── templates/
-│       └── resume_template.tex
+│       ├── resume_template.tex
+│       └── cv_template.html   # HTML template used by WeasyPrintPDFAdapter
 └── presentation/              # HTTP layer (FastAPI routers)
     ├── resumes.py
     ├── analyses.py
@@ -68,12 +72,14 @@ services/cv-enhancer/src/
 
 ```
 AppSettings (config.py)
-  ├─ S3StorageAdapter      (IStorageService)
-  ├─ DoclingParser         (IDocumentParser)
-  ├─ GeminiLLMAdapter      (ILLMService)
-  ├─ InMemoryJobRepository (IJobRepository)
-  ├─ LocalLaTeXCompiler    (ILaTeXCompilerService)
-  └─ AnalyzeCVUseCase       ← consumes storage, parser, llm, job_repo, latex_compiler
+  ├─ S3StorageAdapter         (IStorageService)
+  ├─ DoclingParser            (IDocumentParser)
+  ├─ GeminiLLMAdapter         (ILLMService)
+  ├─ DynamoJobRepository      (IJobRepository)
+  ├─ WeasyPrintPDFAdapter     (IPDFRenderService)
+  ├─ EditorAIGeminiAdapter    (IEditorAIService)
+  ├─ SQSService               (SQS producer for async jobs; not required by core pipeline)
+  └─ AnalyzeCVUseCase         ← consumes storage, parser, llm, job_repo, pdf_renderer, settings
 ```
 
 ---
@@ -82,22 +88,28 @@ AppSettings (config.py)
 
 ### 3.1 Shared Domain (`domain/models.py`)
 
-| Class | Mô tả |
-|-------|-------|
+| Class        | Mô tả                                                           |
+| ------------ | --------------------------------------------------------------- |
 | **SkillGap** | Kỹ năng/qualification có trong JD nhưng thiếu hoặc yếu trong CV |
-| | `skill: str` — Tên cụ thể của kỹ năng |
-| | `importance: "critical" \| "recommended" \| "nice-to-have"` |
+|              | `skill: str` — Tên cụ thể của kỹ năng                           |
+|              | `importance: "critical" \| "recommended" \| "nice-to-have"`     |
 
 ### 3.2 Analysis Job Domain (`core/domain/analysis_job.py`)
 
-| Class | Mô tả |
-|-------|-------|
-| **JobStatus** | Enum: `QUEUED`, `PROCESSING`, `COMPLETED`, `FAILED` |
-| **RedFlag** | Vấn đề cấu trúc/nội dung CV |
-| | `title: str`, `description: str`, `severity: "low" \| "medium" \| "high"` |
-| **AnalysisResult** | Kết quả khi job hoàn thành |
-| | `matching_score`, `missing_skills`, `red_flags`, `latex_code`, `pdf_url` |
-| **AnalysisJob** | Trạng thái job: `id`, `status`, `s3_key`, `jd_text`, `result`, `error`, timestamps |
+| Class              | Mô tả                                                                              |
+| ------------------ | ---------------------------------------------------------------------------------- |
+| **JobStatus**      | Enum: `QUEUED`, `PROCESSING`, `COMPLETED`, `FAILED`                                |
+| **RedFlag**        | Vấn đề cấu trúc/nội dung CV                                                        |
+|                    | `title: str`, `description: str`, `severity: "low" \| "medium" \| "high"`          |
+| **AnalysisResult** | Kết quả khi job hoàn thành                                                         |
+|                    | `matching_score`, `missing_skills`, `red_flags`, `enhanced_cv_json`, `pdf_url`     |
+| **AnalysisJob**    | Trạng thái job: `id`, `status`, `s3_key`, `jd_text`, `result`, `error`, timestamps |
+
+### 3.3 CV Resume Schema (`core/domain/cv_resume_schema.py`)
+
+| Class              | Mô tả                                                              |
+| ------------------ | ------------------------------------------------------------------ |
+| **CVResumeSchema** | Mô hình CV đã chuẩn hoá (structured JSON) dùng cho bước render PDF |
 
 ---
 
@@ -105,53 +117,54 @@ AppSettings (config.py)
 
 ### 4.1 Domain Ports (`domain/ports.py`)
 
-| Port | Method | Mô tả |
-|------|--------|-------|
-| **IDocumentParser** | `parse_pdf(file_path) -> str` | PDF → Markdown/plain text |
-| **IStorageService** | `generate_presigned_upload_url(object_key, content_type) -> str` | Presigned PUT URL |
-| | `download_object(object_key, local_path) -> None` | Download object về local |
-| | `upload_file(local_path, object_key, content_type) -> str` | Upload file lên storage |
-| | `generate_presigned_download_url(object_key) -> str` | Presigned GET URL |
+| Port                | Method                                                           | Mô tả                     |
+| ------------------- | ---------------------------------------------------------------- | ------------------------- |
+| **IDocumentParser** | `parse_pdf(file_path) -> str`                                    | PDF → Markdown/plain text |
+| **IStorageService** | `generate_presigned_upload_url(object_key, content_type) -> str` | Presigned PUT URL         |
+|                     | `download_object(object_key, local_path) -> None`                | Download object về local  |
+|                     | `upload_file(local_path, object_key, content_type) -> str`       | Upload file lên storage   |
+|                     | `generate_presigned_download_url(object_key) -> str`             | Presigned GET URL         |
 
 ### 4.2 Core Ports (`core/ports/`)
 
-| Port | Method | Mô tả |
-|------|--------|-------|
-| **ILLMService** | `analyze_and_enhance(cv_text, jd_text) -> FullAnalysisOutput` | Phân tích + enhance CV |
-| **IJobRepository** | `save(job)`, `get(job_id)`, `update(job)` | CRUD AnalysisJob |
-| **IEditorAIService** | `refine(selected_text, prompt) -> str` | Tinh chỉnh LaTeX snippet |
-| **ILaTeXCompilerService** | `markdown_to_latex(markdown) -> str` | Markdown → LaTeX |
-| | `compile_to_pdf(latex_code, output_dir) -> str` | LaTeX → PDF |
+| Port                  | Method                                                        | Mô tả                                             |
+| --------------------- | ------------------------------------------------------------- | ------------------------------------------------- |
+| **ILLMService**       | `analyze_and_enhance(cv_text, jd_text) -> FullAnalysisOutput` | Phân tích + enhance CV                            |
+| **IJobRepository**    | `save(job)`, `get(job_id)`, `update(job)`                     | CRUD AnalysisJob                                  |
+| **IEditorAIService**  | `refine(selected_text, prompt) -> str`                        | Tinh chỉnh LaTeX snippet                          |
+| **IPDFRenderService** | `render_to_pdf(cv_data, output_dir) -> str`                   | Render `CVResumeSchema` → PDF (HTML + WeasyPrint) |
 
 ---
 
 ## 5. Adapters (Implementations)
 
-| Adapter | Implements | Mô tả |
-|---------|------------|-------|
-| **DoclingParser** | IDocumentParser | Docling PDF → Markdown (async via executor) |
-| **S3StorageAdapter** | IStorageService | AWS S3 presigned URLs, download, upload |
-| **GeminiLLMAdapter** | ILLMService | LangGraph: Analyzer → Enhancer (Gemini 1.5 Flash) |
-| **InMemoryJobRepository** | IJobRepository | In-memory dict với asyncio lock |
-| **EditorAIGeminiAdapter** | IEditorAIService | Gemini refine LaTeX snippet |
-| **LocalLaTeXCompiler** | ILaTeXCompilerService | Jinja2 + pdflatex (Markdown → LaTeX → PDF) |
+| Adapter                   | Implements            | Mô tả                                                                                                 |
+| ------------------------- | --------------------- | ----------------------------------------------------------------------------------------------------- |
+| **DoclingParser**         | IDocumentParser       | Docling PDF → Markdown (async via executor)                                                           |
+| **S3StorageAdapter**      | IStorageService       | AWS S3 presigned URLs, download, upload                                                               |
+| **GeminiLLMAdapter**      | ILLMService           | LangGraph: Analyzer → Enhancer (Gemini)                                                               |
+| **InMemoryJobRepository** | IJobRepository        | In-memory dict với asyncio lock (dev/legacy)                                                          |
+| **DynamoJobRepository**   | IJobRepository        | Lưu/persist AnalysisJob vào bảng DynamoDB                                                             |
+| **SQSService**            | —                     | Gửi message job (`job_id`, `s3_key`, `jd_text`) lên AWS SQS queue                                     |
+| **EditorAIGeminiAdapter** | IEditorAIService      | Gemini refine LaTeX snippet                                                                           |
+| **WeasyPrintPDFAdapter**  | IPDFRenderService     | Render `CVResumeSchema` → HTML (Jinja2) → PDF (WeasyPrint)                                            |
+| **LocalLaTeXCompiler**    | ILaTeXCompilerService | Jinja2 + pdflatex (Markdown → LaTeX → PDF) — pipeline cũ, có thể bỏ hoặc chỉ dùng cho một số use case |
 
 ---
 
 ## 6. Use Case: AnalyzeCVUseCase
 
-**Pipeline 8 bước** (chạy trong BackgroundTask):
+**Pipeline 7 bước** (chạy trong BackgroundTask, bám sát `AnalyzeCVUseCase` hiện tại):
 
-1. Đánh dấu job `PROCESSING`
-2. Download PDF từ S3 về `/tmp`
-3. Parse PDF → Markdown (Docling)
-4. Chạy LLM pipeline (Analyzer → Enhancer) → score, gaps, red_flags, enhanced Markdown
-5. Markdown → LaTeX (Jinja2 template)
-6. Compile LaTeX → PDF (pdflatex)
-7. Upload PDF lên S3 (`enhanced-pdf/`)
-8. Tạo presigned download URL, lưu `AnalysisResult`, đánh dấu `COMPLETED`
+1. Đánh dấu job `PROCESSING` trong repository (DynamoDB).
+2. Download PDF từ S3 về thư mục tạm (`/tmp`).
+3. Parse PDF → plain text/Markdown (Docling).
+4. Chạy LLM pipeline (Analyzer → Enhancer) → trả về `matching_score`, `missing_skills`, `red_flags`, `enhanced_cv_json` (kiểu `CVResumeSchema`).
+5. Render `enhanced_cv_json` → HTML template → PDF thông qua `IPDFRenderService` (WeasyPrint).
+6. Upload PDF đã render lên S3 dưới prefix `enhanced-pdf/`.
+7. Tạo presigned download URL, lưu `AnalysisResult`, đánh dấu job `COMPLETED`.
 
-Mọi exception trong bước 2–8 → job chuyển `FAILED` với error message.
+Mọi exception trong bước 2–7 → job chuyển `FAILED` với error message có log chi tiết.
 
 ---
 
@@ -164,11 +177,12 @@ GET /health
 ```
 
 **Response (200):**
+
 ```json
 {
-  "status": "healthy",
-  "service": "cv-enhancer",
-  "version": "2.0.0"
+    "status": "healthy",
+    "service": "cv-enhancer",
+    "version": "2.0.0"
 }
 ```
 
@@ -180,23 +194,26 @@ Content-Type: application/json
 ```
 
 **Request:**
+
 ```json
 {
-  "file_name": "cv.pdf",
-  "content_type": "application/pdf"
+    "file_name": "cv.pdf",
+    "content_type": "application/pdf"
 }
 ```
 
 **Response (201):**
+
 ```json
 {
-  "upload_url": "https://...",
-  "s3_key": "raw-pdf/<uuid>_cv.pdf",
-  "bucket": "<bucket-name>"
+    "upload_url": "https://...",
+    "s3_key": "raw-pdf/<uuid>_cv.pdf",
+    "bucket": "<bucket-name>"
 }
 ```
 
 **Luồng frontend:**
+
 1. Gọi endpoint này để lấy `upload_url` và `s3_key`
 2. PUT file PDF trực tiếp lên `upload_url` (browser → S3)
 3. Dùng `s3_key` khi gọi POST `/api/v1/analyses`
@@ -211,18 +228,20 @@ Content-Type: application/json
 ```
 
 **Request:**
+
 ```json
 {
-  "s3_key": "raw-pdf/<uuid>_cv.pdf",
-  "jd_text": "Full job description text (min 50 chars)..."
+    "s3_key": "raw-pdf/<uuid>_cv.pdf",
+    "jd_text": "Full job description text (min 50 chars)..."
 }
 ```
 
 **Response (202 Accepted):**
+
 ```json
 {
-  "id": "<job_id>",
-  "status": "queued"
+    "id": "<job_id>",
+    "status": "queued"
 }
 ```
 
@@ -233,46 +252,47 @@ GET /api/v1/analyses/{job_id}
 ```
 
 **Response (200) — Đang xử lý:**
+
 ```json
 {
-  "id": "<job_id>",
-  "status": "processing",
-  "error": null,
-  "result": null
+    "id": "<job_id>",
+    "status": "processing",
+    "error": null,
+    "result": null
 }
 ```
 
 **Response (200) — Hoàn thành:**
+
 ```json
 {
-  "id": "<job_id>",
-  "status": "completed",
-  "error": null,
-  "result": {
-    "matching_score": 75,
-    "missing_skills": [
-      { "skill": "Kubernetes", "importance": "critical" }
-    ],
-    "red_flags": [
-      {
-        "title": "Employment Gap 2021-2022",
-        "description": "...",
-        "severity": "medium"
-      }
-    ],
-    "latex_code": "\\documentclass...",
-    "pdf_url": "https://..."
-  }
+    "id": "<job_id>",
+    "status": "completed",
+    "error": null,
+    "result": {
+        "matching_score": 75,
+        "missing_skills": [{ "skill": "Kubernetes", "importance": "critical" }],
+        "red_flags": [
+            {
+                "title": "Employment Gap 2021-2022",
+                "description": "...",
+                "severity": "medium"
+            }
+        ],
+        "latex_code": "\\documentclass...",
+        "pdf_url": "https://..."
+    }
 }
 ```
 
 **Response (200) — Thất bại:**
+
 ```json
 {
-  "id": "<job_id>",
-  "status": "failed",
-  "error": "Error message...",
-  "result": null
+    "id": "<job_id>",
+    "status": "failed",
+    "error": "Error message...",
+    "result": null
 }
 ```
 
@@ -286,17 +306,19 @@ Content-Type: application/json
 ```
 
 **Request:**
+
 ```json
 {
-  "selected_text": "\\item Implemented feature X",
-  "prompt": "Make it STAR format"
+    "selected_text": "\\item Implemented feature X",
+    "prompt": "Make it STAR format"
 }
 ```
 
 **Response (200):**
+
 ```json
 {
-  "new_text": "\\item Architected..."
+    "new_text": "\\item Architected..."
 }
 ```
 
@@ -308,27 +330,30 @@ Content-Type: application/json
 ```
 
 **Request:**
+
 ```json
 {
-  "latex_code": "\\documentclass[10pt,a4paper]{article}..."
+    "latex_code": "\\documentclass[10pt,a4paper]{article}..."
 }
 ```
 
 **Response (200) — Thành công:**
+
 ```json
 {
-  "pdf_url": "https://...",
-  "success": true,
-  "error": null
+    "pdf_url": "https://...",
+    "success": true,
+    "error": null
 }
 ```
 
 **Response (200) — Thất bại:**
+
 ```json
 {
-  "pdf_url": "",
-  "success": false,
-  "error": "Error message..."
+    "pdf_url": "",
+    "success": false,
+    "error": "Error message..."
 }
 ```
 
@@ -336,38 +361,40 @@ Content-Type: application/json
 
 ## 8. Cấu hình (Environment Variables)
 
-| Biến | Bắt buộc | Mặc định | Mô tả |
-|------|----------|---------|-------|
-| `GOOGLE_API_KEY` | Có | — | Gemini API key |
-| `GEMINI_MODEL` | Không | `gemini-1.5-flash` | Model Gemini |
-| `AWS_REGION` | Có | — | AWS region |
-| `AWS_ACCESS_KEY_ID` | Có | — | AWS access key |
-| `AWS_SECRET_ACCESS_KEY` | Có | — | AWS secret key |
-| `AWS_SESSION_TOKEN` | Không | `None` | Session token (optional) |
-| `AWS_S3_BUCKET` | Có | — | Tên S3 bucket |
-| `AWS_S3_RAW_PREFIX` | Không | `raw-pdf/` | Prefix cho CV upload |
-| `AWS_S3_ENHANCED_PREFIX` | Không | `enhanced-pdf/` | Prefix cho PDF đã enhance |
-| `AWS_S3_PRESIGNED_UPLOAD_EXPIRATION_SECONDS` | Không | `900` | TTL presigned upload (giây) |
-| `AWS_S3_PRESIGNED_DOWNLOAD_EXPIRATION_SECONDS` | Không | `3600` | TTL presigned download (giây) |
-| `PORT` | Không | `8000` | Port khi chạy local |
+| Biến                                           | Bắt buộc | Mặc định           | Mô tả                                            |
+| ---------------------------------------------- | -------- | ------------------ | ------------------------------------------------ |
+| `GOOGLE_API_KEY`                               | Có       | —                  | Gemini API key                                   |
+| `GEMINI_MODEL`                                 | Không    | `gemini-1.5-flash` | Model Gemini                                     |
+| `AWS_REGION`                                   | Có       | —                  | AWS region                                       |
+| `AWS_ACCESS_KEY_ID`                            | Có       | —                  | AWS access key                                   |
+| `AWS_SECRET_ACCESS_KEY`                        | Có       | —                  | AWS secret key                                   |
+| `AWS_SESSION_TOKEN`                            | Không    | `None`             | Session token (optional)                         |
+| `AWS_S3_BUCKET`                                | Có       | —                  | Tên S3 bucket                                    |
+| `AWS_S3_RAW_PREFIX`                            | Không    | `raw-pdf/`         | Prefix cho CV upload                             |
+| `AWS_S3_ENHANCED_PREFIX`                       | Không    | `enhanced-pdf/`    | Prefix cho PDF đã enhance                        |
+| `AWS_S3_PRESIGNED_UPLOAD_EXPIRATION_SECONDS`   | Không    | `900`              | TTL presigned upload (giây)                      |
+| `AWS_S3_PRESIGNED_DOWNLOAD_EXPIRATION_SECONDS` | Không    | `3600`             | TTL presigned download (giây)                    |
+| `DYNAMODB_ANALYSIS_TABLE_NAME`                 | Có       | —                  | Tên DynamoDB table lưu `AnalysisJob`             |
+| `SQS_QUEUE_URL`                                | Không    | —                  | URL của SQS queue nếu dùng SQS để push job async |
+| `PORT`                                         | Không    | `8000`             | Port khi chạy local                              |
 
 ---
 
 ## 9. Dependencies
 
-| Package | Version | Mục đích |
-|---------|---------|----------|
-| fastapi | ≥0.115.0 | Web framework |
-| uvicorn | ≥0.32.0 | ASGI server |
-| pydantic | ≥2.9.0 | Validation, settings |
-| pydantic-settings | ≥2.5.0 | Env-based settings |
-| docling | ≥2.7.0 | PDF parsing |
-| langchain | ≥0.3.0 | LLM orchestration |
-| langchain-google-genai | ≥2.0.0 | Gemini integration |
-| langgraph | ≥0.2.0 | Analyzer → Enhancer graph |
-| boto3 | ≥1.35.0 | S3 client |
-| jinja2 | ≥3.1.0 | LaTeX templating |
-| python-dotenv | ≥1.0.1 | `.env` loading |
+| Package                | Version  | Mục đích                  |
+| ---------------------- | -------- | ------------------------- |
+| fastapi                | ≥0.115.0 | Web framework             |
+| uvicorn                | ≥0.32.0  | ASGI server               |
+| pydantic               | ≥2.9.0   | Validation, settings      |
+| pydantic-settings      | ≥2.5.0   | Env-based settings        |
+| docling                | ≥2.7.0   | PDF parsing               |
+| langchain              | ≥0.3.0   | LLM orchestration         |
+| langchain-google-genai | ≥2.0.0   | Gemini integration        |
+| langgraph              | ≥0.2.0   | Analyzer → Enhancer graph |
+| boto3                  | ≥1.35.0  | S3 client                 |
+| jinja2                 | ≥3.1.0   | LaTeX templating          |
+| python-dotenv          | ≥1.0.1   | `.env` loading            |
 
 **System dependency:** `pdflatex` (TeX Live) cho PDF compilation.
 
@@ -389,25 +416,25 @@ Prompts nằm trong `core/prompts/cv_analysis_prompt.py`:
 
 ---
 
-## 11. LaTeX Compilation
+## 11. PDF Rendering
 
-### 11.1 Markdown → LaTeX
+### 11.1 HTML + WeasyPrint (pipeline hiện tại)
 
-`LocalLaTeXCompiler` chuyển Markdown sang LaTeX:
+`WeasyPrintPDFAdapter` nhận `CVResumeSchema` rồi:
 
-- H1 → centred name header
-- H2 → section heading
-- H3 → subsection (role/company)
-- `- item` → `\item` trong `itemize`
-- **bold**, *italic*, `code`, links → LaTeX equivalents
+- Render Jinja2 template `cv_template.html` thành HTML (auto-escape, strict undefined).
+- Dùng WeasyPrint (`HTML(string=...)`) để convert HTML → PDF bytes.
+- Ghi file `resume.pdf` vào thư mục output, sau đó file này được upload lên S3.
 
-### 11.2 Template
+### 11.2 Legacy LaTeX pipeline
 
-`resume_template.tex` dùng Jinja2 với delimiters `<< >>` để inject body. Các package: `geometry`, `hyperref`, `enumitem`, `titlesec`, `parskip`.
+Pipeline cũ sử dụng `LocalLaTeXCompiler`:
 
-### 11.3 pdflatex
+- Markdown → LaTeX theo các rule heading/list/style.
+- Template `resume_template.tex` (Jinja2 với delimiters `<< >>`) để render body.
+- Chạy `pdflatex` 2 lần, upload PDF lên S3.
 
-Chạy pdflatex 2 lần để resolve cross-references. Output PDF được upload lên S3.
+Hiện tại pipeline chính dùng HTML + WeasyPrint; LaTeX chỉ nên giữ cho backward compatibility hoặc use case đặc biệt.
 
 ---
 
@@ -418,10 +445,15 @@ Chạy pdflatex 2 lần để resolve cross-references. Output PDF được uplo
 ```bash
 cd services/cv-enhancer
 export GOOGLE_API_KEY=your_key
+export GEMINI_MODEL=gemini-2.5-flash
+
 export AWS_REGION=us-east-1
 export AWS_ACCESS_KEY_ID=...
 export AWS_SECRET_ACCESS_KEY=...
 export AWS_S3_BUCKET=your-bucket
+
+export DYNAMODB_ANALYSIS_TABLE_NAME=radiance-cv-analyses
+export SQS_QUEUE_URL=https://sqs.<region>.amazonaws.com/<account-id>/<queue-name>  # Optional nếu dùng SQS
 
 python -m uvicorn main:app --host 0.0.0.0 --port 8000 --app-dir src
 ```
