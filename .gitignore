@@ -3,6 +3,7 @@ __pycache__/
 aws_config_export.json
 .cursor
 scripts/
+.pytest_cache/
 
 # dependencies
 /node_modules

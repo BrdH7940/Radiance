@@ -10,7 +10,7 @@ Dependency graph
 ----------------
 AppSettings
   ├─ S3StorageAdapter         (implements IStorageService)
-  ├─ DoclingParser            (implements IDocumentParser)
+  ├─ PDFPlumberParser         (implements IDocumentParser)
   ├─ GeminiLLMAdapter         (implements ILLMService)
   ├─ InMemoryJobRepository    (implements IJobRepository)
   ├─ WeasyPrintPDFAdapter     (implements IPDFRenderService)
@@ -32,7 +32,7 @@ from domain.ports import IStorageService
 from infrastructure.adapters.editor_ai_gemini_adapter import EditorAIGeminiAdapter
 from infrastructure.adapters.gemini_llm_adapter import GeminiLLMAdapter
 from infrastructure.adapters.weasyprint_pdf_adapter import WeasyPrintPDFAdapter
-from infrastructure.parsers.docling_adapter import DoclingParser
+from infrastructure.parsers.pdfplumber_adapter import PDFPlumberParser
 from infrastructure.storage.s3_storage import S3StorageAdapter
 from infrastructure.adapters.dynamo_job_repository import DynamoJobRepository
 from infrastructure.adapters.sqs_service import SQSService
@@ -61,10 +61,10 @@ def get_storage_service() -> IStorageService:
 
 
 @lru_cache(maxsize=1)
-def get_document_parser() -> DoclingParser:
-    """Singleton Docling PDF parser."""
-    logger.info("Initialising DoclingParser…")
-    return DoclingParser()
+def get_document_parser() -> PDFPlumberParser:
+    """Singleton pdfplumber PDF parser."""
+    logger.info("Initialising PDFPlumberParser…")
+    return PDFPlumberParser()
 
 
 # ---------------------------------------------------------------------------

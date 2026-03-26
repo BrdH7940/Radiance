@@ -7,8 +7,8 @@ from abc import ABC, abstractmethod
 
 class IDocumentParser(ABC):
     """Interface for parsing documents into plain text.
-    
-    Example: Docling, PDFplumber, etc.
+
+    Example: PDFPlumber, PyMuPDF, etc.
     """
 
     @abstractmethod

@@ -52,12 +52,30 @@ cd services/cv-enhancer
 # Build image (uses services/cv-enhancer/Dockerfile)
 docker build -t cv-enhancer:latest .
 
-# Run container with env vars from .env
+# Run container with env vars from .env (development dockerfile)
 docker run --rm -p 8000:8000 \
   --env-file .env \
   -v "$(pwd)/src:/app/src" \
   cv-enhancer:latest \
   uvicorn main:app --host 0.0.0.0 --port 8000 --app-dir /app/src --reload
+
+# Run container (lambda dockerfile)
+docker run --rm \
+  --network host \
+  --env-file services/cv-enhancer/.env \
+  -v "$PWD/services/cv-enhancer:/app" \
+  -w /app \
+  cv-enhancer-lambda:latest \
+  sh -lc "python -m uvicorn main:app --host 0.0.0.0 --port 8000 --app-dir /app/src"
+```
+
+Build `dockerfile.lambda`:
+
+```
+docker build \
+  -f services/cv-enhancer/Dockerfile.lambda \
+  -t cv-enhancer-lambda:latest \
+  .
 ```
 
 Testing Gemini:
@@ -71,7 +89,7 @@ docker run --rm \
   -e LIVE_TEST_CV_PDF_PATH=/app/test_data/sample_cv.pdf \
   -v "$PWD/services/cv-enhancer:/app" \
   -w /app \
-  cv-enhancer:latest \
+  cv-enhancer-lambda:latest \
   sh -lc "pip install -r requirements-dev.txt && python -m pytest -q tests/test_live_aws_gemini_e2e.py"
 ```
 
@@ -92,6 +110,7 @@ docker push "$ECR_IMAGE_URI"
 
 # Sửa lại biến URI (thêm :latest)
 ECR_IMAGE_URI="651914029391.dkr.ecr.us-east-1.amazonaws.com/radiance-backend-image:latest"
+LAMBDA_FUNCTION_NAME="radiance-backend-api"
 
 # Chạy lại lệnh
 aws lambda update-function-code \

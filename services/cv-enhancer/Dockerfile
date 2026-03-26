@@ -2,14 +2,11 @@
 FROM python:3.11-slim AS base
 
 # System packages:
-#   - libgl1, libglib2.0-0, poppler-utils: required by Docling's vision pipeline
 #   - WeasyPrint runtime deps (Pango, HarfBuzz, Cairo, GDK-Pixbuf, libffi, JPEG, OpenJPEG)
 #   - fonts-liberation: provides metric-compatible Liberation fonts (Arial/Times/Courier)
 #     so WeasyPrint can render PDFs without missing-font fallback issues
+#   pdfplumber is pure-Python (pdfminer.six + Pillow) — no extra system libs required.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libgl1 \
-        libglib2.0-0 \
-        poppler-utils \
         libpango-1.0-0 \
         libharfbuzz0b \
         libpangoft2-1.0-0 \

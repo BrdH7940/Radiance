@@ -109,7 +109,7 @@ class AnalyzeCVUseCase:
                 )
 
                 # Step 3 — Parse PDF to text
-                logger.info("Step 3: Parsing PDF with Docling.")
+                logger.info("Step 3: Parsing PDF with pdfplumber.")
                 cv_text: str = await self._parser.parse_pdf(local_pdf_path)
                 logger.info(
                     "Step 3 ✓ Extracted %d characters from CV.", len(cv_text)
