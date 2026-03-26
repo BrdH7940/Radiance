@@ -56,7 +56,55 @@ docker build -t cv-enhancer:latest .
 docker run --rm -p 8000:8000 \
   --env-file .env \
   -v "$(pwd)/src:/app/src" \
-  radiance-cv-enhancer
+  cv-enhancer:latest \
+  uvicorn main:app --host 0.0.0.0 --port 8000 --app-dir /app/src --reload
+```
+
+Testing Gemini:
+
+```
+docker run --rm \
+  --network host \
+  --env-file services/cv-enhancer/.env \
+  -e RUN_LIVE_AWS_GEMINI_TESTS=1 \
+  -e LIVE_TEST_BASE_URL=http://localhost:8000 \
+  -e LIVE_TEST_CV_PDF_PATH=/app/test_data/sample_cv.pdf \
+  -v "$PWD/services/cv-enhancer:/app" \
+  -w /app \
+  cv-enhancer:latest \
+  sh -lc "pip install -r requirements-dev.txt && python -m pytest -q tests/test_live_aws_gemini_e2e.py"
+```
+
+Update lambda image
+
+```
+export AWS_REGION="us-east-1"
+export AWS_ACCOUNT_ID="651914029391"
+export ECR_REPO_NAME="radiance-backend-image"   # tên repo trong ECR
+export ECR_REGISTRY="651914029391.dkr.ecr.us-east-1.amazonaws.com"
+export ECR_IMAGE_URI="651914029391.dkr.ecr.us-east-1.amazonaws.com/radiance-backend-image"
+
+aws ecr get-login-password --region "$AWS_REGION" \
+| docker login --username AWS --password-stdin "$ECR_REGISTRY"
+
+docker tag cv-enhancer-lambda:latest "$ECR_IMAGE_URI"
+docker push "$ECR_IMAGE_URI"
+
+# Sửa lại biến URI (thêm :latest)
+ECR_IMAGE_URI="651914029391.dkr.ecr.us-east-1.amazonaws.com/radiance-backend-image:latest"
+
+# Chạy lại lệnh
+aws lambda update-function-code \
+  --function-name "$LAMBDA_FUNCTION_NAME" \
+  --region "$AWS_REGION" \
+  --image-uri "$ECR_IMAGE_URI"
+
+# Check xem đang xài image nào:
+aws lambda get-function \
+  --function-name "$LAMBDA_FUNCTION_NAME" \
+  --region "$AWS_REGION" \
+  --query 'Code.ImageUri' \
+  --output text
 ```
 
 ```bash

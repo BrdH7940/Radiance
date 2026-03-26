@@ -8,7 +8,6 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
@@ -160,4 +159,5 @@ def handler(event, context):
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
+    import uvicorn  # Local dev only; Lambda handler does not need uvicorn.
     uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)

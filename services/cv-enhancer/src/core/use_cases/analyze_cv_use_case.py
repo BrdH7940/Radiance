@@ -77,6 +77,9 @@ class AnalyzeCVUseCase:
                 logger.error(
                     "Pipeline aborted: job '%s' not found in repository.", job_id
                 )
+                await self._mark_failed(
+                    job_id, s3_key, jd_text, f"Job not found in repository: {job_id}"
+                )
                 return
 
             await self._job_repo.update(
@@ -91,6 +94,7 @@ class AnalyzeCVUseCase:
             logger.error(
                 "Failed to mark job '%s' as PROCESSING: %s", job_id, exc, exc_info=True
             )
+            await self._mark_failed(job_id, s3_key, jd_text, str(exc))
             return
 
         # ── Steps 2–7: Pipeline (any failure → FAILED) ──────────────────────

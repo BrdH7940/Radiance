@@ -68,10 +68,28 @@ class DynamoJobRepository(IJobRepository):
     async def get(self, job_id: str) -> AnalysisJob | None:
         try:
             if self._sk_name:
-                response = self.table.get_item(
-                    Key={self._pk_name: self.user_id, self._sk_name: job_id}
-                )
-                item = response.get("Item")
+                try:
+                    # Fast path when we believe the table has a sort key.
+                    response = self.table.get_item(
+                        Key={self._pk_name: self.user_id, self._sk_name: job_id}
+                    )
+                    item = response.get("Item")
+                except ClientError as e:
+                    # Common live failure mode:
+                    # - describe_table is forbidden for the Lambda role
+                    # - _sk_name fallback becomes incorrect (e.g. "id" but table has no sort key)
+                    # DynamoDB raises ValidationException for key-schema mismatch.
+                    if e.response.get("Error", {}).get("Code") == "ValidationException":
+                        # Fallback: query within partition and filter by our logical id attribute.
+                        resp = self.table.query(
+                            KeyConditionExpression=DynamoKey(self._pk_name).eq(self.user_id),
+                            FilterExpression=Attr("id").eq(job_id),
+                            Limit=1,
+                        )
+                        items = resp.get("Items", [])
+                        item = items[0] if items else None
+                    else:
+                        raise
             else:
                 # No sort key: query within partition and filter by our logical id.
                 resp = self.table.query(
