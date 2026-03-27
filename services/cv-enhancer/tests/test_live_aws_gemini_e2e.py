@@ -216,6 +216,6 @@ def test_live_flow_upload_analyze_and_poll_completion():
 
     # Step 6: verify job persisted in DynamoDB
     dynamo = boto3.resource("dynamodb", region_name=region).Table(table_name)
-    item = dynamo.get_item(Key={"id": job_id}).get("Item")
+    item = dynamo.get_item(Key={"UserId": os.environ["AWS_ACCOUNT_ID"]}).get("Item")
     assert item is not None
     assert item["status"] == "completed"

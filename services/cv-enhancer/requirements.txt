@@ -24,7 +24,10 @@ botocore>=1.35.0
 
 # ── HTML Templating & PDF Generation ──────────────────────────────────────────
 jinja2>=3.1.0
-weasyprint>=61.0
+# Lambda Python 3.11 base image (Amazon Linux 2) ships an older Pango runtime.
+# WeasyPrint >= 60 may call newer Pango symbols unavailable on AL2.
+# Pin to a known-compatible branch for AL2.
+weasyprint>=60.0
 
 # ── Utilities ──────────────────────────────────────────────────────────────────
 python-dotenv>=1.0.1

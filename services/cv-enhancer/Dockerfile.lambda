@@ -1,12 +1,20 @@
-FROM public.ecr.aws/lambda/python:3.11
+FROM public.ecr.aws/lambda/python:3.12
 
-# pdfplumber is pure-Python (pdfminer.six + Pillow) — no native build toolchain
-# or scientific libraries are required. A minimal yum update is enough.
-RUN yum update -y && yum clean all && rm -rf /var/cache/yum
+# AL2023 dùng dnf (microdnf) thay yum
+RUN dnf install -y \
+      pango \
+      cairo \
+      gdk-pixbuf2 \
+      libffi \
+      harfbuzz \
+      fontconfig \
+      dejavu-sans-fonts \
+      dejavu-serif-fonts && \
+    dnf clean all
 
-# ── Install Python deps ────────────────────────────────────────────────────────
 COPY services/cv-enhancer/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir --prefer-binary -r /tmp/requirements.txt
+RUN python -c "from weasyprint import HTML; HTML(string='<h1>ok</h1>').write_pdf('/tmp/smoke.pdf')"
 
 WORKDIR /var/task
 ENV PYTHONPATH=/var/task
