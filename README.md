@@ -1,4 +1,4 @@
-# Radiance — Tóm Tắt Kiến Trúc Kỹ Thuật
+# Radiance
 
 ## Tổng Quan Hệ Thống
 
