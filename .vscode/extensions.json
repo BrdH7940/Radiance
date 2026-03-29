@@ -1,8 +1,0 @@
-{
-  "recommendations": [
-    "esbenp.prettier-vscode",
-    "redhat.vscode-yaml",
-    "foxundermoon.shell-format",
-    "EditorConfig.EditorConfig"
-  ]
-}
