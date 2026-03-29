@@ -14,7 +14,7 @@ Radiance giải quyết điều đó: semantic matching CV–JD, phát hiện sk
 
 Pipeline xử lý AI được thiết kế theo mô hình **Event-Driven Architecture**.
 
-![Architecture](docs\images\Sequence.JPG)
+![Architecture](docs/images/Sequence.JPG)
 
 ---
 
