@@ -2,367 +2,159 @@
 
 ## 1. Tổng quan
 
-Frontend Radiance là ứng dụng Next.js 14 (App Router) kết nối với backend CV-Enhancer qua REST API. Luồng chính:
+Frontend nằm trong **`apps/web`**: Next.js 14 (App Router), static export, kết nối backend CV-Enhancer qua REST. Luồng sản phẩm:
 
-1. **Upload** — User upload CV (PDF) và paste Job Description
-2. **Analysis** — Backend phân tích async, frontend poll kết quả
-3. **Dashboard** — Hiển thị score, skill gaps, red flags
-4. **Workspace** — Editor LaTeX + PDF preview + AI refinement
+1. **Upload** — PDF CV + Job Description  
+2. **Phân tích** — upload S3 → trigger job → poll kết quả  
+3. **Dashboard** — điểm ATS, skill gaps, red flags  
+4. **Workspace** — chỉnh sửa CV dạng **form structured JSON** (`CVResumeSchema`), preview HTML/PDF, AI refine từng trường, render PDF qua API  
+
+Backend lưu job trên **DynamoDB** và xử lý bất đồng bộ qua **SQS + Lambda**; frontend chỉ cần `NEXT_PUBLIC_API_URL` trỏ tới API (xem [BACKEND.md](./BACKEND.md) phần AWS).
 
 ---
 
-## 2. Cấu trúc thư mục
+## 2. Cấu trúc thư mục (`apps/web/`)
 
 ```
 apps/web/
 ├── app/
-│   ├── layout.tsx           # Root layout (Inter font, metadata)
-│   ├── page.tsx             # Upload page (/)
-│   ├── dashboard/page.tsx   # Analysis dashboard (/dashboard)
-│   ├── workspace/page.tsx   # LaTeX editor + PDF preview (/workspace)
-│   └── globals.css          # Tailwind, CSS vars, animations
+│   ├── layout.tsx
+│   ├── page.tsx              # Upload (/)
+│   ├── dashboard/page.tsx    # /dashboard
+│   └── workspace/page.tsx    # /workspace
 ├── components/
 │   ├── dashboard/
-│   │   ├── AnalysisDashboard.tsx  # Score + SkillGaps + RedFlags + CTA
-│   │   ├── ScoreGauge.tsx         # Circular ATS score (0–100)
-│   │   ├── SkillGaps.tsx          # Missing skills list
-│   │   └── RedFlags.tsx           # Red flags list
+│   │   ├── AnalysisDashboard.tsx
+│   │   ├── ScoreGauge.tsx
+│   │   ├── SkillGaps.tsx
+│   │   └── RedFlags.tsx
 │   ├── editor/
-│   │   ├── MonacoEditorWrapper.tsx # LaTeX Monaco editor
-│   │   └── FloatingAIMenu.tsx     # AI rewrite popover
+│   │   ├── CVFormBuilder.tsx    # Form chỉnh CVResumeSchema + AI popover
+│   │   ├── CVPreview.tsx        # Live HTML preview hoặc iframe PDF
+│   │   ├── FloatingAIMenu.tsx    # (legacy / Monaco helper, không gắn page chính)
+│   │   └── MonacoEditorWrapper.tsx
 │   └── ui/
-│       ├── NavBar.tsx             # 3-step nav (Input → Analysis → Forge)
-│       ├── CVDropzone.tsx          # PDF upload (drag & drop)
-│       ├── JDTextarea.tsx          # Job description input
-│       ├── PDFPreview.tsx          # LaTeX preview / PDF iframe
-│       └── AnalyzingOverlay.tsx    # Loading overlay during analysis
+│       ├── NavBar.tsx
+│       ├── CVDropzone.tsx
+│       ├── JDTextarea.tsx
+│       ├── AnalyzingOverlay.tsx
+│       └── PDFPreview.tsx       # không dùng bởi workspace hiện tại
 ├── services/
-│   ├── api.ts               # API client, types, orchestration
-│   └── mockData.ts          # LOADING_STEPS, MOCK_LATEX_CODE
+│   ├── api.ts              # Client, types, uploadAndAnalyze, aiRefineText, renderCvToPdf
+│   └── mockData.ts         # LOADING_STEPS
 ├── store/
-│   └── useCVStore.ts        # Zustand CV state
-├── next.config.mjs          # output: 'export', trailingSlash
+│   └── useCVStore.ts       # Zustand
+├── next.config.mjs
 ├── tailwind.config.ts
 └── package.json
 ```
 
 ---
 
-## 3. Routing và Pages
+## 3. Routing
 
 | Route | File | Mô tả |
-|-------|------|-------|
-| `/` | `app/page.tsx` | Upload: CVDropzone + JDTextarea + "Analyze & Enhance CV" |
-| `/dashboard` | `app/dashboard/page.tsx` | Kết quả: score, skill gaps, red flags, "Enhance with AI" |
-| `/workspace` | `app/workspace/page.tsx` | LaTeX editor + PDF preview + AI refinements |
+| ----- | ---- | ----- |
+| `/` | `app/page.tsx` | Upload, validate JD ≥ 50 ký tự, `uploadAndAnalyze` |
+| `/dashboard` | `app/dashboard/page.tsx` | Kết quả phân tích, CTA vào workspace |
+| `/workspace` | `app/workspace/page.tsx` | `CVFormBuilder` + `CVPreview`, render PDF |
 
-**Luồng:** Upload → Analyze → Dashboard → Workspace
-
-**Cấu hình Next.js:**
-- `output: 'export'` — Static export
-- `trailingSlash: true`
-- Tất cả pages dùng `'use client'`; routing qua `useRouter()` từ `next/navigation`
+**Next.js:** `output: 'export'`, `trailingSlash: true`, `images.unoptimized`. Các page chính dùng `'use client'`.
 
 ---
 
-## 4. State Management — useCVStore
+## 4. State — `store/useCVStore.ts`
 
-**File:** `apps/web/store/useCVStore.ts`
+| Field | Ý nghĩa |
+| ----- | -------- |
+| `cvFile`, `jdText` | Input upload |
+| `jobId`, `analysisResult` | Job async + `AnalysisResultDTO` |
+| **`cvData`** | `CVResumeSchema \| null` — dữ liệu workspace (từ `enhanced_cv_json`) |
+| `pdfUrl` | URL PDF (presigned) sau render hoặc từ kết quả phân tích |
+| `phase` | `upload` \| `analyzing` \| `dashboard` \| `workspace` |
+| `loadingStepIndex`, `loadingSteps` | Overlay khi phân tích |
 
-### Store shape
-
-```typescript
-interface CVStore {
-  // Input data
-  cvFile: File | null
-  jdText: string
-
-  // Async job
-  jobId: string | null
-  analysisResult: AnalysisResultState | null  // AnalysisResultDTO
-
-  // Workspace data (populated when entering workspace from dashboard)
-  latexCode: string
-  pdfUrl: string
-
-  // UI state
-  phase: AppPhase  // 'upload' | 'analyzing' | 'dashboard' | 'workspace'
-  loadingStepIndex: number
-  loadingSteps: typeof LOADING_STEPS
-
-  // Actions
-  setCvFile, setJdText, setJobId, setAnalysisResult,
-  setLatexCode, setPdfUrl, setPhase, setLoadingStepIndex, reset
-}
-```
-
-### Data flow
-
-1. **Upload:** CVDropzone / JDTextarea → `setCvFile` / `setJdText`
-2. **Analyze:** `uploadAndAnalyze()` → `setJobId`, `setAnalysisResult`, `setPhase('dashboard')`
-3. **Dashboard:** `handleEnhanceWithAI` → `setLatexCode`, `setPdfUrl`, `setPhase('workspace')`
-4. **Workspace:** MonacoEditorWrapper → `setLatexCode`; `compileLaTeXToPdf` → `setPdfUrl`
+**Luồng dữ liệu:** Dashboard `setCvData(analysisResult.enhanced_cv_json)` + `setPdfUrl(pdf_url)` trước khi vào workspace. Workspace cập nhật `cvData` khi user sửa form; render PDF gọi `renderCvToPdf(cvData)`.
 
 ---
 
-## 5. API Service Layer
+## 5. API — `services/api.ts`
 
-**File:** `apps/web/services/api.ts`
+**Base URL:** `process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'`
 
-### Base URL
+| Hàm / area | Endpoint | Ghi chú |
+| ---------- | -------- | ------- |
+| `AnalysisService.getUploadUrl` | `POST /api/v1/resumes/upload-urls` | |
+| `AnalysisService.uploadToS3` | PUT presigned | |
+| `AnalysisService.triggerAnalysis` | `POST /api/v1/analyses` | 202 + job id |
+| `AnalysisService.pollJobStatus` | `GET /api/v1/analyses/{id}` | 2s interval, max ~10 phút |
+| `uploadAndAnalyze` | orchestration | `onStep(0..4)` cho UI |
+| `aiRefineText` | `POST /api/v1/editor/refinements` | plain text → `new_text` |
+| **`renderCvToPdf`** | `POST /api/v1/editor/renders` | Body `{ cv_data: CVResumeSchema }` |
 
-```typescript
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-```
+### Types quan trọng
 
-### Endpoints
-
-| Method | Endpoint | Mục đích |
-|--------|----------|----------|
-| POST | `/api/v1/resumes/upload-urls` | Lấy presigned S3 upload URL |
-| POST | `/api/v1/analyses` | Bắt đầu job phân tích (trả về job ID) |
-| GET | `/api/v1/analyses/{id}` | Poll trạng thái job |
-| POST | `/api/v1/editor/refinements` | AI rewrite LaTeX snippet |
-| POST | `/api/v1/editor/renders` | Compile LaTeX → PDF |
-
-### AnalysisService (low-level)
-
-| Method | Mô tả |
-|--------|-------|
-| `getUploadUrl(fileName, contentType)` | → `{ upload_url, s3_key, bucket }` |
-| `uploadToS3(file, uploadUrl)` | PUT file lên presigned URL |
-| `triggerAnalysis(s3Key, jdText)` | → `{ id, status }` |
-| `pollJobStatus(jobId)` | → `AnalysisStatusResponse` |
-
-### Orchestration: uploadAndAnalyze()
-
-1. Lấy presigned URL
-2. Upload file lên S3
-3. Trigger analysis
-4. Poll mỗi 2s (tối đa ~10 phút)
-5. Khi hoàn thành: `{ jobId, status, result, error }`
-6. `onStep(0..4)` cho loading UI
-
-### Workspace APIs
-
-| Function | Mô tả |
-|----------|-------|
-| `aiEditSelectedText(selectedText, prompt)` | → `{ newText }` |
-| `compileLaTeXToPdf(latexCode)` | → `{ pdf_url, success, error? }` |
+- **`AnalysisResultDTO`**: `matching_score`, `missing_skills`, `red_flags`, **`enhanced_cv_json`**, `pdf_url` — **không** dùng `latex_code` trong contract hiện tại.
+- **`CVResumeSchema`** và các interface lồng (`CVPersonalInfo`, `CVExperience`, …) mirror backend Pydantic.
 
 ---
 
-## 6. Types và Interfaces
+## 6. Components chính
 
-### API types (`services/api.ts`)
+### Upload & layout
 
-```typescript
-// Upload
-ResumeUploadUrlRequest { file_name, content_type }
-ResumeUploadUrlResponse { upload_url, s3_key, bucket }
+- **CVDropzone** — chỉ PDF.  
+- **JDTextarea** — paste HTML → plain text; gợi ý độ dài JD.  
+- **AnalyzingOverlay** — `phase === 'analyzing'`, steps từ `mockData`.  
+- **NavBar** — bước Input / Analysis / Forge.
 
-// Analysis
-CreateAnalysisRequest { s3_key, jd_text }
-CreateAnalysisResponse { id, status }
-JobStatus = 'queued' | 'processing' | 'completed' | 'failed'
+### Dashboard
 
-SkillGapDTO { skill, importance }
-RedFlagDTO { title, description, severity }
-AnalysisResultDTO {
-  matching_score, missing_skills, red_flags,
-  latex_code, pdf_url
-}
-AnalysisStatusResponse { id, status, error?, result? }
+- **AnalysisDashboard** — gauge, skill gaps, red flags, `onEnhanceWithAI`.
 
-// Editor
-AIEditResult { newText }
-EditorRenderResponse { pdf_url, success, error? }
-```
+### Workspace
 
-### Component types
-
-```typescript
-// MonacoEditorWrapper
-SelectionInfo {
-  selectedText: string
-  screenPosition: { top: number; left: number }
-  monacoSelection: { startLineNumber, startColumn, endLineNumber, endColumn }
-}
-
-// PDFPreview
-ParsedCV { name, location, email, linkedin, github, sections }
-ParsedSection { title, entries, summary?, tableRows? }
-ParsedEntry { title, subtitle?, date?, bullets }
-```
+- **CVFormBuilder** — sections theo schema (personal, experience, education, …); nút AI mở popover gọi `aiRefineText` cho từng field.  
+- **CVPreview** — khi có `pdfUrl`: iframe PDF; không thì preview HTML từ `cvData`.  
+- **MonacoEditorWrapper / FloatingAIMenu** — vẫn trong repo nhưng **không** được mount trên `workspace/page.tsx` hiện tại; workspace dùng form + popover nội bộ.
 
 ---
 
-## 7. Component Hierarchy
-
-```
-RootLayout (layout.tsx)
-└── Page (route-specific)
-    ├── NavBar (activeStep: 1 | 2 | 3)
-    ├── [Upload] CVDropzone, JDTextarea, AnalyzingOverlay
-    ├── [Dashboard] AnalysisDashboard
-    │   ├── ScoreGauge
-    │   ├── SkillGaps
-    │   └── RedFlags
-    └── [Workspace]
-        ├── MonacoEditorWrapper (latexCode, onChange → setLatexCode)
-        ├── PDFPreview (latexCode, pdfUrl)
-        ├── FloatingAIMenu (aiEditSelectedText)
-        └── Toast notifications
-```
-
----
-
-## 8. Chi tiết Components
-
-### 8.1 CVDropzone
-
-- Drag & drop hoặc click để chọn PDF
-- Chỉ chấp nhận `application/pdf`
-- Gọi `setCvFile(file)` khi có file
-- Hiển thị tên file, size, nút Remove
-
-### 8.2 JDTextarea
-
-- Textarea cho Job Description
-- `handlePaste`: parse HTML từ clipboard (li, p, h1–h6) → plain text
-- Word count, char count; cảnh báo nếu < 50 từ
-- `setJdText` khi thay đổi
-
-### 8.3 NavBar
-
-- 3 bước: Input (1), Analysis (2), Forge (3)
-- `activeStep` quyết định bước đang active
-- Badge "Model Active"
-
-### 8.4 AnalyzingOverlay
-
-- Full-screen overlay khi `phase === 'analyzing'`
-- Hiển thị `loadingSteps` theo `loadingStepIndex`
-- Progress bar, spinner
-
-### 8.5 AnalysisDashboard
-
-- `ScoreGauge`: gauge tròn 0–100 (emerald/amber/rose theo score)
-- `SkillGaps`: danh sách skill thiếu với importance (critical/recommended/nice-to-have)
-- `RedFlags`: danh sách red flags với severity (high/medium/low)
-- CTA "Enhance with AI" → `onEnhanceWithAI` → set latexCode, pdfUrl, phase, navigate workspace
-
-### 8.6 MonacoEditorWrapper
-
-- Monaco Editor với LaTeX Monarch tokenizer
-- Theme `radiance-dark`
-- `onSelectionChange`: emit `SelectionInfo` khi user chọn text
-- `onEditorMount`: expose editor instance cho parent (apply AI edits)
-
-### 8.7 FloatingAIMenu
-
-- Popover khi user chọn text và click Zap
-- Quick prompts: "Make it STAR format", "Add metrics & numbers", etc.
-- Input + Generate → gọi `aiEdit(selectedText, prompt)` → `onApply(newText, monacoSelection)`
-- Parent dùng `editor.executeEdits()` để thay thế selection
-
-### 8.8 PDFPreview
-
-- **Khi có `pdfUrl`:** iframe hiển thị PDF đã compile
-- **Khi chưa có:** parse LaTeX → render HTML (ParsedCV)
-- Zoom, page navigation
-- `onTextDoubleClick`: double-click text → tìm vị trí trong LaTeX → `handleNavigateToPosition`
-
----
-
-## 9. Integration với Backend cv-enhancer
-
-### Request/Response mapping
+## 7. Tích hợp backend
 
 | Frontend | Backend |
-|----------|---------|
-| `POST /api/v1/resumes/upload-urls` | `resumes.py` → S3 presigned URL |
-| `POST /api/v1/analyses` | `analyses.py` → BackgroundTask, job ID |
-| `GET /api/v1/analyses/{id}` | `analyses.py` → job status + result |
-| `POST /api/v1/editor/refinements` | `editor.py` → Gemini refinement |
-| `POST /api/v1/editor/renders` | `editor.py` → pdflatex + S3 upload |
+| -------- | ------- |
+| Upload URL + PUT S3 | `resumes.py` + S3 presigned |
+| POST analyses | DynamoDB + **SQS** (worker Lambda chạy pipeline) |
+| GET analyses | Đọc job từ DynamoDB |
+| Refinements | Gemini, plain text |
+| Renders | **WeasyPrint** + S3 — input là **JSON**, không phải LaTeX |
 
-### Luồng phân tích (Backend)
-
-1. Parse CV PDF (Docling)
-2. Phân tích vs JD (Gemini LLM)
-3. Tạo Markdown CV
-4. Chuyển Markdown → LaTeX qua `resume_template.tex`
-5. Compile LaTeX → PDF
-6. Upload PDF lên S3
-7. Lưu result vào job repository
-
-### LaTeX Template (Backend)
-
-**File:** `services/cv-enhancer/src/infrastructure/templates/resume_template.tex`
-
-- Jinja2 với `<< body >>` (tránh conflict với LaTeX `{}`)
-- Packages: `lmodern`, `geometry`, `hyperref`, `enumitem`, `titlesec`, `parskip`
-- Body được inject bởi `latex_compiler_adapter.py` từ Markdown
-
-### Editor AI flow
-
-1. User chọn LaTeX trong Monaco
-2. Click Zap → `FloatingAIMenu` mở
-3. User nhập prompt (hoặc quick prompt)
-4. `aiEditSelectedText(selectedText, prompt)` → `POST /api/v1/editor/refinements`
-5. Backend: `editor_ai.refine()` (Gemini)
-6. Frontend: `editor.executeEdits()` thay thế selection
+Pipeline phân tích server: PDF → text (pdfplumber) → LLM → **CVResumeSchema** → HTML → PDF → S3.
 
 ---
 
-## 10. Styling và Theming
+## 8. Styling
 
-### Tailwind
-
-- `midnight` (#020408), `midnight-2` (#0a0f18)
-- Font: Inter (Google)
-- Utilities: `glow-blob`, `bg-grid`, `animate-in`, `fade-in`, `slide-in-from-bottom-8`
-
-### CSS vars (`globals.css`)
-
-```css
-:root {
-  --color-bg: #020408;
-  --color-bg-2: #0a0f18;
-  --font-inter: 'Inter', system-ui, sans-serif;
-}
-```
-
-### Monaco theme
-
-- `radiance-dark`: background `#05070a`, foreground `#CBD5E1`
-- Tokens: comment, keyword.control, keyword, string.math, delimiter, number
+Tailwind, palette `midnight`, font Inter, utility (`glow-blob`, `bg-grid`, animation classes). Theme tùy chỉnh chủ yếu trong `app/globals.css` và `tailwind.config.ts`.
 
 ---
 
-## 11. Environment
+## 9. Environment
 
 | Biến | Mặc định | Mô tả |
-|------|----------|-------|
-| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | Backend base URL |
+| ---- | -------- | ----- |
+| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | Base URL API CV-Enhancer |
 
 ---
 
-## 12. Dependencies
+## 10. Dependencies (package.json)
 
-| Package | Version | Mục đích |
-|---------|---------|----------|
-| next | 14.2.5 | Framework |
-| react | ^18 | UI |
-| zustand | ^5.0.11 | State management |
-| @monaco-editor/react | ^4.7.0 | LaTeX editor |
-| lucide-react | ^0.575.0 | Icons |
-| tailwindcss | ^3.4.1 | Styling |
+- `next` 14.2.5, `react` 18, `zustand`, `@monaco-editor/react`, `lucide-react`, `tailwindcss`, TypeScript.
 
 ---
 
-## 13. Chạy Frontend
+## 11. Chạy dev / build
 
 ```bash
 cd apps/web
@@ -370,34 +162,23 @@ npm install
 npm run dev
 ```
 
-Build static:
+Static export:
 
 ```bash
 npm run build
-# Output: out/
+# output: out/
 ```
 
 ---
 
-## 14. Error Handling
+## 12. Xử lý lỗi (tiêu biểu)
 
-- **uploadAndAnalyze:** catch → `setValidationError`, `setPhase('upload')`
-- **aiEditSelectedText:** catch → hiển thị error trong FloatingAIMenu
-- **compileLaTeXToPdf:** catch → toast notification (success/error)
-- **Dashboard/Workspace:** `analysisResult === null` hoặc `!latexCode` → redirect về `/`
+- **uploadAndAnalyze** — lỗi → quay `phase` về `upload`, hiển thị message.  
+- **renderCvToPdf / aiRefineText** — toast hoặc notification trên workspace.  
+- **Dashboard / workspace** — guard: không có `analysisResult` / `cvData` thì redirect về `/`.
 
 ---
 
-## 15. Loading Steps (mockData.ts)
+## 13. Loading steps (`services/mockData.ts`)
 
-```typescript
-LOADING_STEPS = [
-  { id: 1, label: 'Preparing upload…' },
-  { id: 2, label: 'Uploading CV to storage…' },
-  { id: 3, label: 'Starting analysis…' },
-  { id: 4, label: 'Analyzing CV & job description…' },
-  { id: 5, label: 'Generating enhanced CV…' },
-]
-```
-
-`onStep(0..4)` được gọi tương ứng với từng bước trong `uploadAndAnalyze`.
+Các bước hiển thị khi phân tích (upload → S3 → trigger → poll) được map với `onStep` trong `uploadAndAnalyze` (xem code để đồng bộ index với UI).
