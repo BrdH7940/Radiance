@@ -1,4 +1,4 @@
-name: Backend — package & deploy
+name: Backend — test, package & deploy
 
 on:
     push:
@@ -8,14 +8,33 @@ on:
     workflow_dispatch: {}
 
 jobs:
+    test:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Set up Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: '3.12'
+                  cache: 'pip'
+                  cache-dependency-path: services/cv-enhancer/requirements.txt
+
+            - name: Install dependencies
+              run: pip install -r services/cv-enhancer/requirements.txt
+
+            - name: Run tests
+              run: pytest services/cv-enhancer/tests/ -v
+
     deploy:
+        needs: test
         runs-on: ubuntu-latest
         environment: env
         steps:
             - uses: actions/checkout@v4
 
             - name: Configure AWS credentials
-              uses: aws-actions/configure-aws-credentials@v2
+              uses: aws-actions/configure-aws-credentials@v4
               with:
                   aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
                   aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -31,15 +50,10 @@ jobs:
                   ECR_REPOSITORY: radiance-backend-image
                   IMAGE_TAG: ${{ github.sha }}
               run: |
-                  if [ -z "$ECR_REGISTRY" ]; then 
-                    echo "Error: ECR_REGISTRY is empty"
-                    exit 1
-                  fi
-
                   docker build \
                     -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
                     -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
-                    -f services/Dockerfile .
+                    -f services/cv-enhancer/Dockerfile.lambda .
 
                   docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
                   docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
@@ -50,16 +64,11 @@ jobs:
                   ECR_REPOSITORY: radiance-backend-image
                   IMAGE_TAG: ${{ github.sha }}
               run: |
-                  echo "Waiting for image to be available..."
-                  sleep 5
-
-                  # Update Lambda with new image
                   aws lambda update-function-code \
                     --function-name radiance-backend-api \
                     --image-uri $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
-                  echo "Waiting for Lambda update to complete..."
                   aws lambda wait function-updated \
                     --function-name radiance-backend-api
 
-                  echo "Lambda function updated successfully with image: $IMAGE_TAG"
+                  echo "Lambda updated successfully with image: $IMAGE_TAG"
