@@ -6,6 +6,7 @@ scripts/
 .pytest_cache/
 TESTING_GUIDE_RUN.md
 _terraform.yml
+fetch/
 
 # dependencies
 /node_modules
