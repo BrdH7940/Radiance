@@ -157,8 +157,7 @@ export function FloatingAIMenu({
 
             {/* Preview of selected text */}
             <span className="max-w-[180px] truncate text-xs text-slate-600 font-mono">
-              "{selectionInfo.selectedText.slice(0, 48)}
-              {selectionInfo.selectedText.length > 48 ? '…' : ''}"
+              &ldquo;{selectionInfo.selectedText.slice(0, 48)}{selectionInfo.selectedText.length > 48 ? '…' : ''}&rdquo;
             </span>
 
             <button

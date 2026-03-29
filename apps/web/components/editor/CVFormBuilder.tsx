@@ -91,7 +91,7 @@ function AIPopover({
                 <span className="text-[10px] font-bold text-violet-400 tracking-wider">RADIANCE AI</span>
                 <div className="flex-1" />
                 <span className="text-[10px] text-slate-600 font-mono truncate max-w-[160px]">
-                    "{target.value.slice(0, 40)}{target.value.length > 40 ? '…' : ''}"
+                    &ldquo;{target.value.slice(0, 40)}{target.value.length > 40 ? '…' : ''}&rdquo;
                 </span>
                 <button onClick={onClose} className="w-5 h-5 flex items-center justify-center rounded-full text-slate-600 hover:text-slate-300 hover:bg-white/5 transition-colors">
                     <X className="w-3 h-3" />
@@ -852,7 +852,7 @@ export function CVFormBuilder({ cvData, onChange }: CVFormBuilderProps) {
                         ))}
                         {cvData.awards_certifications.length === 0 && (
                             <p className="text-[11px] text-slate-600 text-center py-2">
-                                No awards or certifications yet. Click "Add award" to add one.
+                                No awards or certifications yet. Click &ldquo;Add award&rdquo; to add one.
                             </p>
                         )}
                     </div>

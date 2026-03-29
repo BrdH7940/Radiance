@@ -49,8 +49,6 @@ export default function WorkspacePage() {
         if (!cvData) router.replace('/')
     }, [cvData, router])
 
-    if (!cvData) return null
-
     // ── Notification helpers ──────────────────────────────────────────────────
 
     const showNotification = useCallback(
@@ -152,6 +150,8 @@ export default function WorkspacePage() {
     }, [pdfUrl, showNotification])
 
     // ── Render ────────────────────────────────────────────────────────────────
+
+    if (!cvData) return null
 
     return (
         <div className="h-screen flex flex-col overflow-hidden bg-midnight">

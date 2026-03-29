@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useState } from 'react'
-import { FileText, Upload, X, CheckCircle } from 'lucide-react'
+import { Upload, X, CheckCircle } from 'lucide-react'
 import { useCVStore } from '@/store/useCVStore'
 
 export function CVDropzone() {

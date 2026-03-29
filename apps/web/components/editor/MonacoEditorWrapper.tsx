@@ -118,9 +118,9 @@ export function MonacoEditorWrapper({
 
             // Register LaTeX language
             monaco.languages.register({ id: 'latex' })
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             monaco.languages.setMonarchTokensProvider(
                 'latex',
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 LATEX_TOKENS as any
             )
 
