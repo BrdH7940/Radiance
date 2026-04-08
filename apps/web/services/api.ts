@@ -5,10 +5,30 @@
  * - Workspace: uploadAndAnalyze (orchestrated), aiRefineText, renderCvToPdf.
  */
 
+import { createClient } from '@/lib/supabase/client'
+
 const API_BASE =
     typeof process !== 'undefined' && process.env.NEXT_PUBLIC_API_URL
         ? process.env.NEXT_PUBLIC_API_URL
         : 'http://localhost:8000'
+
+// ─── Auth helper ──────────────────────────────────────────────────────────────
+
+/**
+ * Returns the current Supabase access token, or null if not signed in.
+ * Used to inject the Authorization header into authenticated API calls.
+ */
+export async function getSupabaseToken(): Promise<string | null> {
+    try {
+        const supabase = createClient()
+        const {
+            data: { session },
+        } = await supabase.auth.getSession()
+        return session?.access_token ?? null
+    } catch {
+        return null
+    }
+}
 
 // ─── CV Resume Schema types (mirror backend Pydantic models) ─────────────────
 
@@ -144,12 +164,21 @@ export interface EditorRenderResponse {
 
 // ─── AnalysisService ─────────────────────────────────────────────────────────
 
-async function getJson<T>(url: string, init?: RequestInit): Promise<T> {
+async function getJson<T>(
+    url: string,
+    init?: RequestInit,
+    authToken?: string | null
+): Promise<T> {
+    const authHeaders: Record<string, string> = authToken
+        ? { Authorization: `Bearer ${authToken}` }
+        : {}
+
     const res = await fetch(url, {
         ...init,
         headers: {
             'Content-Type': 'application/json',
             ...(init?.headers as Record<string, string>),
+            ...authHeaders,
         },
     })
     if (!res.ok) {
@@ -164,6 +193,7 @@ export const AnalysisService = {
         fileName: string,
         contentType: string
     ): Promise<ResumeUploadUrlResponse> {
+        const token = await getSupabaseToken()
         return getJson<ResumeUploadUrlResponse>(
             `${API_BASE}/api/v1/resumes/upload-urls`,
             {
@@ -172,7 +202,8 @@ export const AnalysisService = {
                     file_name: fileName,
                     content_type: contentType,
                 }),
-            }
+            },
+            token
         )
     },
 
@@ -188,15 +219,35 @@ export const AnalysisService = {
         }
     },
 
-    async triggerAnalysis(s3Key: string, jdText: string): Promise<CreateAnalysisResponse> {
-        return getJson<CreateAnalysisResponse>(`${API_BASE}/api/v1/analyses`, {
-            method: 'POST',
-            body: JSON.stringify({ s3_key: s3Key, jd_text: jdText }),
-        })
+    async triggerAnalysis(
+        s3Key: string,
+        jdText: string,
+        jobTitle?: string | null,
+        companyName?: string | null
+    ): Promise<CreateAnalysisResponse> {
+        const token = await getSupabaseToken()
+        return getJson<CreateAnalysisResponse>(
+            `${API_BASE}/api/v1/analyses`,
+            {
+                method: 'POST',
+                body: JSON.stringify({
+                    s3_key: s3Key,
+                    jd_text: jdText,
+                    job_title: jobTitle ?? null,
+                    company_name: companyName ?? null,
+                }),
+            },
+            token
+        )
     },
 
     async pollJobStatus(jobId: string): Promise<AnalysisStatusResponse> {
-        return getJson<AnalysisStatusResponse>(`${API_BASE}/api/v1/analyses/${jobId}`)
+        const token = await getSupabaseToken()
+        return getJson<AnalysisStatusResponse>(
+            `${API_BASE}/api/v1/analyses/${jobId}`,
+            undefined,
+            token
+        )
     },
 }
 
@@ -272,9 +323,13 @@ export async function aiRefineText(
     selectedText: string,
     prompt: string
 ): Promise<AIEditResult> {
+    const token = await getSupabaseToken()
     const res = await fetch(`${API_BASE}/api/v1/editor/refinements`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ selected_text: selectedText, prompt }),
     })
 
@@ -292,9 +347,13 @@ export async function aiRefineText(
  * Returns a presigned S3 URL to the generated PDF.
  */
 export async function renderCvToPdf(cvData: CVResumeSchema): Promise<EditorRenderResponse> {
+    const token = await getSupabaseToken()
     const res = await fetch(`${API_BASE}/api/v1/editor/renders`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ cv_data: cvData }),
     })
 

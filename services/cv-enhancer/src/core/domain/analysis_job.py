@@ -72,11 +72,21 @@ class AnalysisJob(BaseModel):
     """
 
     id: str = Field(description="Unique job identifier (UUID hex).")
+    user_id: Optional[str] = Field(
+        default=None,
+        description="Supabase auth user UUID — set when the request is authenticated.",
+    )
     status: JobStatus = Field(default=JobStatus.QUEUED)
     s3_key: str = Field(
         description="S3 object key for the raw CV PDF in the raw-pdf/ prefix."
     )
     jd_text: str = Field(description="Job description text provided by the user.")
+    job_title: Optional[str] = Field(
+        default=None, description="Target job title provided by the user."
+    )
+    company_name: Optional[str] = Field(
+        default=None, description="Target company name provided by the user."
+    )
     created_at: datetime = Field(description="UTC timestamp when the job was created.")
     updated_at: datetime = Field(description="UTC timestamp of the last status update.")
     result: Optional[AnalysisResult] = Field(

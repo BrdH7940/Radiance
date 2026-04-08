@@ -9,13 +9,15 @@ on every HTTP request while remaining testable via cache_clear().
 Dependency graph
 ----------------
 AppSettings
-  ├─ S3StorageAdapter         (implements IStorageService)
-  ├─ PDFPlumberParser         (implements IDocumentParser)
-  ├─ GeminiLLMAdapter         (implements ILLMService)
-  ├─ InMemoryJobRepository    (implements IJobRepository)
-  ├─ WeasyPrintPDFAdapter     (implements IPDFRenderService)
-  ├─ EditorAIGeminiAdapter    (implements IEditorAIService)
-  └─ AnalyzeCVUseCase         ← consumes all five above
+  ├─ S3StorageAdapter              (implements IStorageService)
+  ├─ PDFPlumberParser              (implements IDocumentParser)
+  ├─ GeminiLLMAdapter              (implements ILLMService)
+  ├─ DynamoJobRepository           (implements IJobRepository)
+  ├─ WeasyPrintPDFAdapter          (implements IPDFRenderService)
+  ├─ EditorAIGeminiAdapter         (implements IEditorAIService)
+  ├─ SupabaseProjectRepository     (implements IProjectRepository)
+  ├─ SupabaseHistoryRepository     (implements IHistoryRepository)
+  └─ AnalyzeCVUseCase              ← consumes the above
 """
 
 import logging
@@ -24,18 +26,23 @@ from pathlib import Path
 
 from config import AppSettings, get_settings
 from core.ports.editor_ai_port import IEditorAIService
+from core.ports.history_repository_port import IHistoryRepository
 from core.ports.job_repository_port import IJobRepository
 from core.ports.llm_port import ILLMService
 from core.ports.pdf_render_port import IPDFRenderService
+from core.ports.project_repository_port import IProjectRepository
 from core.use_cases.analyze_cv_use_case import AnalyzeCVUseCase
 from domain.ports import IStorageService
+from infrastructure.adapters.dynamo_job_repository import DynamoJobRepository
 from infrastructure.adapters.editor_ai_gemini_adapter import EditorAIGeminiAdapter
 from infrastructure.adapters.gemini_llm_adapter import GeminiLLMAdapter
+from infrastructure.adapters.supabase_client import get_supabase_client
+from infrastructure.adapters.supabase_history_repository import SupabaseHistoryRepository
+from infrastructure.adapters.supabase_project_repository import SupabaseProjectRepository
+from infrastructure.adapters.sqs_service import SQSService
 from infrastructure.adapters.weasyprint_pdf_adapter import WeasyPrintPDFAdapter
 from infrastructure.parsers.pdfplumber_adapter import PDFPlumberParser
 from infrastructure.storage.s3_storage import S3StorageAdapter
-from infrastructure.adapters.dynamo_job_repository import DynamoJobRepository
-from infrastructure.adapters.sqs_service import SQSService
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +136,20 @@ def get_editor_ai_service() -> IEditorAIService:
 
 
 @lru_cache(maxsize=1)
+def get_project_repository() -> IProjectRepository:
+    """Singleton SupabaseProjectRepository for the Project Gallery."""
+    logger.info("Initialising SupabaseProjectRepository…")
+    return SupabaseProjectRepository(client=get_supabase_client())
+
+
+@lru_cache(maxsize=1)
+def get_history_repository() -> IHistoryRepository:
+    """Singleton SupabaseHistoryRepository for CV History."""
+    logger.info("Initialising SupabaseHistoryRepository…")
+    return SupabaseHistoryRepository(client=get_supabase_client())
+
+
+@lru_cache(maxsize=1)
 def get_analyze_cv_use_case() -> AnalyzeCVUseCase:
     """Singleton AnalyzeCVUseCase with all injected port implementations."""
     settings = get_settings()
@@ -140,6 +161,7 @@ def get_analyze_cv_use_case() -> AnalyzeCVUseCase:
         job_repo=get_job_repository(),
         pdf_renderer=get_pdf_renderer(),
         settings=settings,
+        history_repo=get_history_repository(),
     )
     logger.info("AnalyzeCVUseCase wired successfully.")
     return use_case

@@ -17,6 +17,8 @@ from core.domain.cv_resume_schema import CVResumeSchema
 from core.ports.editor_ai_port import IEditorAIService
 from core.ports.pdf_render_port import IPDFRenderService
 from domain.ports import IStorageService
+from presentation.dependencies.auth import get_current_user_id
+from presentation.dependencies.rate_limiter import check_editor_rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +45,8 @@ class RefinementResponse(BaseModel):
 )
 async def create_refinement(
     payload: RefinementRequest,
+    user_id: str = Depends(get_current_user_id),
+    _rate_check: None = Depends(check_editor_rate_limit),
     editor_ai: IEditorAIService = Depends(get_editor_ai_service),
 ) -> RefinementResponse:
     """Rewrite the selected text snippet according to the user prompt."""
@@ -83,6 +87,8 @@ class RenderResponse(BaseModel):
 )
 async def create_render(
     payload: RenderRequest,
+    user_id: str = Depends(get_current_user_id),
+    _rate_check: None = Depends(check_editor_rate_limit),
     storage: IStorageService = Depends(get_storage_service),
     pdf_renderer: IPDFRenderService = Depends(get_pdf_renderer),
 ) -> RenderResponse:
