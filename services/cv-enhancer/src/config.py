@@ -17,6 +17,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 def cors_allowed_origins_from_env() -> list[str]:
     """Parse CORS_ALLOWED_ORIGINS without loading AppSettings.
 
+    Value must be a comma-separated list of origins (e.g. ``https://a.com,https://b.com``).
+    Do not put this on ``AppSettings`` as ``list[str]``: pydantic-settings parses list
+    fields from env via ``json.loads``, which breaks comma-separated strings and empty values.
+
     Used when registering CORSMiddleware so `import main` (e.g. pytest) does not
     require AWS/Supabase/Gemini env vars — those are only read when handlers run.
     """
@@ -72,17 +76,6 @@ class AppSettings(BaseSettings):
     supabase_url: str = Field(alias="SUPABASE_URL")
     supabase_service_role_key: str = Field(alias="SUPABASE_SERVICE_ROLE_KEY")
     supabase_jwt_secret: str = Field(alias="SUPABASE_JWT_SECRET")
-
-    # ── CORS ─────────────────────────────────────────────────────────────────
-    cors_allowed_origins: list[str] = Field(
-        default=["http://localhost:3000"],
-        alias="CORS_ALLOWED_ORIGINS",
-        description=(
-            "Comma-separated list of allowed CORS origins. "
-            "Must be explicit (no wildcards) because allow_credentials=True "
-            "requires specific origins per the CORS spec."
-        ),
-    )
 
 
 @lru_cache(maxsize=1)
