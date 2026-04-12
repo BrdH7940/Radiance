@@ -3,6 +3,7 @@
  * Mirrors the backend /api/v1/history endpoints.
  */
 
+import { fastApiErrorDetail, readApiJson } from '@/lib/readApiJson'
 import { createClient } from '@/lib/supabase/client'
 import type { CVResumeSchema } from '@/services/api'
 
@@ -52,9 +53,9 @@ async function apiRequest<T>(path: string): Promise<T> {
     const headers = await getAuthHeaders()
     const res = await fetch(`${API_BASE}${path}`, { headers })
 
-    const data = await res.json()
+    const data = await readApiJson<unknown>(res)
     if (!res.ok) {
-        throw new Error(data?.detail ?? `API ${res.status}: ${res.statusText}`)
+        throw new Error(fastApiErrorDetail(data) ?? `API ${res.status}: ${res.statusText}`)
     }
     return data as T
 }

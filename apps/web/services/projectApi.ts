@@ -3,6 +3,7 @@
  * Mirrors the backend /api/v1/projects endpoints.
  */
 
+import { fastApiErrorDetail, readApiJson } from '@/lib/readApiJson'
 import { createClient } from '@/lib/supabase/client'
 
 const API_BASE =
@@ -60,9 +61,9 @@ async function apiRequest<T>(
 
     if (res.status === 204) return undefined as T
 
-    const data = await res.json()
+    const data = await readApiJson<unknown>(res)
     if (!res.ok) {
-        throw new Error(data?.detail ?? `API ${res.status}: ${res.statusText}`)
+        throw new Error(fastApiErrorDetail(data) ?? `API ${res.status}: ${res.statusText}`)
     }
     return data as T
 }
