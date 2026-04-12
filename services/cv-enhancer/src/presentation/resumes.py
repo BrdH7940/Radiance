@@ -11,12 +11,13 @@ storage implementation (S3, GCS, etc.).
 import logging
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from config import AppSettings, get_settings
 from container import get_storage_service
 from domain.ports import IStorageService
+from presentation.dependencies.auth import get_current_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,10 @@ class ResumeUploadUrlResponse(BaseModel):
 
 router = APIRouter(prefix="/api/v1/resumes", tags=["Resumes"])
 
+# Only PDF uploads are accepted — prevents arbitrary file types being stored
+# in the raw-pdf/ prefix and keeps downstream parsing predictable.
+_ALLOWED_CONTENT_TYPES = frozenset({"application/pdf"})
+
 
 @router.post(
     "/upload-urls",
@@ -51,9 +56,16 @@ router = APIRouter(prefix="/api/v1/resumes", tags=["Resumes"])
 )
 async def create_resume_upload_url(
     payload: ResumeUploadUrlRequest,
+    user_id: str = Depends(get_current_user_id),
     storage_service: IStorageService = Depends(get_storage_service),
 ) -> ResumeUploadUrlResponse:
     """Create a presigned URL that allows the frontend to upload a resume directly to S3."""
+
+    if payload.content_type not in _ALLOWED_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported content type '{payload.content_type}'. Only PDF uploads are accepted.",
+        )
 
     settings: AppSettings = get_settings()
 

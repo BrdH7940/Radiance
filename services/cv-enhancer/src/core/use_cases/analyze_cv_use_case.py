@@ -22,10 +22,13 @@ import logging
 import os
 import tempfile
 from datetime import datetime
-from uuid import uuid4
+from typing import Optional
+from uuid import UUID, uuid4
 
 from config import AppSettings
 from core.domain.analysis_job import AnalysisJob, AnalysisResult, JobStatus
+from core.domain.cv_history import CVHistoryEntry
+from core.ports.history_repository_port import IHistoryRepository
 from core.ports.job_repository_port import IJobRepository
 from core.ports.llm_port import ILLMService
 from core.ports.pdf_render_port import IPDFRenderService
@@ -49,6 +52,7 @@ class AnalyzeCVUseCase:
         job_repo: IJobRepository,
         pdf_renderer: IPDFRenderService,
         settings: AppSettings,
+        history_repo: Optional[IHistoryRepository] = None,
     ) -> None:
         self._storage = storage
         self._parser = parser
@@ -56,6 +60,7 @@ class AnalyzeCVUseCase:
         self._job_repo = job_repo
         self._pdf_renderer = pdf_renderer
         self._settings = settings
+        self._history_repo = history_repo
 
     async def execute(self, job_id: str, s3_key: str, jd_text: str) -> None:
         """Run the pipeline for a given job.
@@ -118,11 +123,10 @@ class AnalyzeCVUseCase:
                     cv_text=cv_text, jd_text=jd_text
                 )
                 logger.info(
-                    "Step 4 ✓ Score: %d, gaps: %d, red flags: %d, candidate: '%s'.",
+                    "Step 4 ✓ Score: %d, gaps: %d, red flags: %d.",
                     analysis.matching_score,
                     len(analysis.missing_skills),
                     len(analysis.red_flags),
-                    analysis.enhanced_cv_json.personal_info.name,
                 )
 
                 # Step 5 — Render CVResumeSchema → HTML → PDF (WeasyPrint)
@@ -160,9 +164,12 @@ class AnalyzeCVUseCase:
 
                 updated_job = AnalysisJob(
                     id=job_id,
+                    user_id=job.user_id,
                     status=JobStatus.COMPLETED,
                     s3_key=s3_key,
                     jd_text=jd_text,
+                    job_title=job.job_title,
+                    company_name=job.company_name,
                     created_at=job.created_at,
                     updated_at=datetime.utcnow(),
                     result=result,
@@ -171,6 +178,32 @@ class AnalyzeCVUseCase:
                 logger.info(
                     "AnalyzeCVUseCase: job '%s' completed successfully.", job_id
                 )
+
+                # Step 8 — Persist to Supabase cv_history (authenticated jobs only)
+                if job.user_id and self._history_repo is not None:
+                    try:
+                        history_entry = CVHistoryEntry(
+                            user_id=UUID(job.user_id),
+                            job_title=job.job_title,
+                            company_name=job.company_name,
+                            jd_text=job.jd_text,
+                            matching_score=analysis.matching_score,
+                            enhanced_cv_json=analysis.enhanced_cv_json.model_dump(
+                                mode="json"
+                            ),
+                            pdf_s3_key=s3_pdf_key,
+                        )
+                        await self._history_repo.save(history_entry)
+                        logger.info(
+                            "Step 8 ✓ CV history saved for user '%s'.", job.user_id
+                        )
+                    except Exception as hist_exc:
+                        # History saving is non-critical — log but don't fail the job.
+                        logger.warning(
+                            "Step 8 ✗ Failed to save CV history for job '%s': %s",
+                            job_id,
+                            hist_exc,
+                        )
 
             except Exception as exc:
                 logger.error(
@@ -189,9 +222,12 @@ class AnalyzeCVUseCase:
             existing = await self._job_repo.get(job_id)
             failed_job = AnalysisJob(
                 id=job_id,
+                user_id=existing.user_id if existing else None,
                 status=JobStatus.FAILED,
                 s3_key=s3_key,
                 jd_text=jd_text,
+                job_title=existing.job_title if existing else None,
+                company_name=existing.company_name if existing else None,
                 created_at=existing.created_at if existing else datetime.utcnow(),
                 updated_at=datetime.utcnow(),
                 error=error_message,

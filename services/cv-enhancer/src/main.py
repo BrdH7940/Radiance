@@ -12,8 +12,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
 
+from config import get_settings
+
 from presentation.analyses import router as analyses_router
 from presentation.editor import router as editor_router
+from presentation.history import router as history_router
+from presentation.projects import router as projects_router
 from presentation.resumes import router as resumes_router
 
 # ---------------------------------------------------------------------------
@@ -41,16 +45,20 @@ async def lifespan(app: FastAPI):
     from container import (
         get_analyze_cv_use_case,
         get_editor_ai_service,
+        get_history_repository,
         get_job_repository,
         get_pdf_renderer,
+        get_project_repository,
         get_storage_service,
     )
 
-    get_storage_service()       # S3 adapter
-    get_pdf_renderer()          # Jinja2 HTML + WeasyPrint
-    get_job_repository()        # in-memory store
-    get_editor_ai_service()     # editor refinements
-    get_analyze_cv_use_case()   # new async pipeline
+    get_storage_service()        # S3 adapter
+    get_pdf_renderer()           # Jinja2 HTML + WeasyPrint
+    get_job_repository()         # DynamoDB job store
+    get_editor_ai_service()      # editor refinements
+    get_project_repository()     # Supabase project gallery
+    get_history_repository()     # Supabase CV history
+    get_analyze_cv_use_case()    # async analysis pipeline (includes history_repo)
 
     logger.info("All dependencies initialised. Service is ready to accept requests.")
     yield
@@ -77,16 +85,21 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Restrict to specific origins in production
+    # Origins come from the CORS_ALLOWED_ORIGINS env var (comma-separated).
+    # Wildcards are incompatible with allow_credentials=True per the CORS spec —
+    # browsers reject credentialed requests to wildcard origins.
+    allow_origins=get_settings().cors_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # ── Routers ──────────────────────────────────────────────────────────────────
-app.include_router(resumes_router)   # POST /api/v1/resumes/upload-urls
-app.include_router(analyses_router)  # POST /api/v1/analyses  |  GET /api/v1/analyses/{id}
-app.include_router(editor_router)    # POST /api/v1/editor/refinements  |  /renders
+app.include_router(resumes_router)   # POST   /api/v1/resumes/upload-urls
+app.include_router(analyses_router)  # POST   /api/v1/analyses  |  GET /api/v1/analyses/{id}
+app.include_router(editor_router)    # POST   /api/v1/editor/refinements  |  /renders
+app.include_router(projects_router)  # CRUD   /api/v1/projects
+app.include_router(history_router)   # GET    /api/v1/history  |  /history/{id}
 
 
 # ---------------------------------------------------------------------------

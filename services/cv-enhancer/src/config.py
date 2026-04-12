@@ -55,6 +55,22 @@ class AppSettings(BaseSettings):
     sqs_queue_url: str = Field(alias="SQS_QUEUE_URL")
     sqs_endpoint_url: Optional[str] = Field(default=None, alias="SQS_ENDPOINT_URL")
 
+    # ── Supabase ─────────────────────────────────────────────────────────────
+    supabase_url: str = Field(alias="SUPABASE_URL")
+    supabase_service_role_key: str = Field(alias="SUPABASE_SERVICE_ROLE_KEY")
+    supabase_jwt_secret: str = Field(alias="SUPABASE_JWT_SECRET")
+
+    # ── CORS ─────────────────────────────────────────────────────────────────
+    cors_allowed_origins: list[str] = Field(
+        default=["http://localhost:3000"],
+        alias="CORS_ALLOWED_ORIGINS",
+        description=(
+            "Comma-separated list of allowed CORS origins. "
+            "Must be explicit (no wildcards) because allow_credentials=True "
+            "requires specific origins per the CORS spec."
+        ),
+    )
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> AppSettings:
