@@ -31,36 +31,20 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Lifespan — startup validation & singleton warm-up
+# Lifespan — keep startup light for Lambda HTTP (CORS OPTIONS runs first)
 # ---------------------------------------------------------------------------
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Validate environment, warm up singletons, and log startup/shutdown."""
+    """Log startup/shutdown only.
+
+    Do not eagerly warm container singletons here: the first HTTP request after a
+    cold start is often a CORS OPTIONS preflight. Initialising WeasyPrint, S3,
+    DynamoDB, Supabase, etc. during startup can raise and turn that preflight
+    into a 500. Real routes already lazy-init via Depends(get_*).
+    """
     logger.info("Radiance CV Enhancer service starting up…")
-
-    # Import here so env validation errors surface immediately at startup
-    # rather than on the first request.
-    from container import (
-        get_analyze_cv_use_case,
-        get_editor_ai_service,
-        get_history_repository,
-        get_job_repository,
-        get_pdf_renderer,
-        get_project_repository,
-        get_storage_service,
-    )
-
-    get_storage_service()        # S3 adapter
-    get_pdf_renderer()           # Jinja2 HTML + WeasyPrint
-    get_job_repository()         # DynamoDB job store
-    get_editor_ai_service()      # editor refinements
-    get_project_repository()     # Supabase project gallery
-    get_history_repository()     # Supabase CV history
-    get_analyze_cv_use_case()    # async analysis pipeline (includes history_repo)
-
-    logger.info("All dependencies initialised. Service is ready to accept requests.")
     yield
     logger.info("Radiance CV Enhancer service shutting down.")
 
