@@ -29,9 +29,17 @@ jobs:
               working-directory: apps/web
               run: npm run lint
 
+            - name: Require NEXT_PUBLIC_API_URL secret
+              run: |
+                  if [ -z "${{ secrets.NEXT_PUBLIC_API_URL }}" ]; then
+                    echo "::error::Add GitHub secret NEXT_PUBLIC_API_URL (API Gateway base URL, e.g. https://abc123.execute-api.region.amazonaws.com — no trailing slash)."
+                    exit 1
+                  fi
+
             - name: Build
               working-directory: apps/web
               env:
+                  NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
                   NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
                   NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
               run: npm run build
