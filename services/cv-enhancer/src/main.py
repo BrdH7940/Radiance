@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
 
-from config import get_settings
+from config import cors_allowed_origins_from_env
 
 from presentation.analyses import router as analyses_router
 from presentation.editor import router as editor_router
@@ -88,7 +88,8 @@ app.add_middleware(
     # Origins come from the CORS_ALLOWED_ORIGINS env var (comma-separated).
     # Wildcards are incompatible with allow_credentials=True per the CORS spec —
     # browsers reject credentialed requests to wildcard origins.
-    allow_origins=get_settings().cors_allowed_origins,
+    # Read env only here — do not call get_settings() at import time (breaks pytest/CI).
+    allow_origins=cors_allowed_origins_from_env(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

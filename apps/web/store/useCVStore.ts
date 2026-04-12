@@ -1,17 +1,7 @@
+import type { User } from '@supabase/supabase-js'
 import { create } from 'zustand'
 import { LOADING_STEPS } from '@/services/mockData'
 import type { AnalysisResultDTO, CVResumeSchema } from '@/services/api'
-
-/**
- * Minimal Supabase User shape — replaced by the real type from
- * @supabase/supabase-js once `npm install` is run.
- */
-export type SupabaseUser = {
-    id: string
-    email?: string | undefined
-    user_metadata: Record<string, unknown>
-    [key: string]: unknown
-}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -21,7 +11,7 @@ export type AnalysisResultState = AnalysisResultDTO
 
 export interface CVStore {
     // Auth state (synced from Supabase via SupabaseAuthListener)
-    user: SupabaseUser | null
+    user: User | null
 
     // Input data
     cvFile: File | null
@@ -41,7 +31,7 @@ export interface CVStore {
     loadingSteps: typeof LOADING_STEPS
 
     // Actions
-    setUser: (user: SupabaseUser | null) => void
+    setUser: (user: User | null) => void
     setCvFile: (file: File | null) => void
     setJdText: (text: string) => void
     setJobId: (id: string | null) => void

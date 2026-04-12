@@ -6,11 +6,24 @@ infrastructure adapters (S3, Gemini, etc.) receive their configuration through
 dependency injection rather than reading os.environ directly.
 """
 
+import os
 from functools import lru_cache
 from typing import Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def cors_allowed_origins_from_env() -> list[str]:
+    """Parse CORS_ALLOWED_ORIGINS without loading AppSettings.
+
+    Used when registering CORSMiddleware so `import main` (e.g. pytest) does not
+    require AWS/Supabase/Gemini env vars — those are only read when handlers run.
+    """
+    raw = os.environ.get("CORS_ALLOWED_ORIGINS", "").strip()
+    if not raw:
+        return ["http://localhost:3000"]
+    return [part.strip() for part in raw.split(",") if part.strip()]
 
 
 class AppSettings(BaseSettings):
