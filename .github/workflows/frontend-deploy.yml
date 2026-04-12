@@ -48,6 +48,12 @@ jobs:
               run: |
                   aws s3 sync apps/web/out "s3://${{ secrets.FRONTEND_BUCKET }}" --delete
 
+            - name: Upload extensionless HTML keys for client routes
+              working-directory: apps/web
+              env:
+                  FRONTEND_BUCKET: ${{ secrets.FRONTEND_BUCKET }}
+              run: node scripts/upload-s3-html-path-aliases.mjs
+
             - name: Invalidate CloudFront cache
               run: |
                   aws cloudfront create-invalidation \
