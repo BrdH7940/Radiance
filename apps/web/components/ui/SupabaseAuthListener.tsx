@@ -11,15 +11,20 @@ import { useCVStore } from '@/store/useCVStore'
  * all client components can access the current user via useCVStore().
  */
 export function SupabaseAuthListener() {
-    const { setUser } = useCVStore()
+    const { setUser, setAuthHydrated } = useCVStore()
 
     useEffect(() => {
         const supabase = createClient()
 
         // Hydrate the store with the current session on mount.
-        supabase.auth.getUser().then(({ data: { user } }) => {
-            setUser(user)
-        })
+        supabase.auth
+            .getUser()
+            .then(({ data: { user } }) => {
+                setUser(user)
+            })
+            .finally(() => {
+                setAuthHydrated(true)
+            })
 
         // Subscribe to future auth state changes.
         const {
@@ -29,7 +34,7 @@ export function SupabaseAuthListener() {
         })
 
         return () => subscription.unsubscribe()
-    }, [setUser])
+    }, [setUser, setAuthHydrated])
 
     return null
 }

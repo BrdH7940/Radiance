@@ -12,6 +12,8 @@ export type AnalysisResultState = AnalysisResultDTO
 export interface CVStore {
     // Auth state (synced from Supabase via SupabaseAuthListener)
     user: User | null
+    /** True after the first client-side session check completes (for static-export guards). */
+    authHydrated: boolean
 
     // Input data
     cvFile: File | null
@@ -32,6 +34,7 @@ export interface CVStore {
 
     // Actions
     setUser: (user: User | null) => void
+    setAuthHydrated: (hydrated: boolean) => void
     setCvFile: (file: File | null) => void
     setJdText: (text: string) => void
     setJobId: (id: string | null) => void
@@ -45,8 +48,9 @@ export interface CVStore {
 
 // ─── Initial state ────────────────────────────────────────────────────────────
 
-const initialState: Pick<CVStore, 'user' | 'cvFile' | 'jdText' | 'jobId' | 'analysisResult' | 'cvData' | 'pdfUrl' | 'phase' | 'loadingStepIndex' | 'loadingSteps'> = {
+const initialState: Pick<CVStore, 'user' | 'authHydrated' | 'cvFile' | 'jdText' | 'jobId' | 'analysisResult' | 'cvData' | 'pdfUrl' | 'phase' | 'loadingStepIndex' | 'loadingSteps'> = {
     user: null,
+    authHydrated: false,
     cvFile: null,
     jdText: '',
     jobId: null,
@@ -64,6 +68,7 @@ export const useCVStore = create<CVStore>((set) => ({
     ...initialState,
 
     setUser: (user) => set({ user }),
+    setAuthHydrated: (authHydrated) => set({ authHydrated }),
     setCvFile: (file) => set({ cvFile: file }),
     setJdText: (text) => set({ jdText: text }),
     setJobId: (id) => set({ jobId: id }),

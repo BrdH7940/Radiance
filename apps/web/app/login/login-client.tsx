@@ -1,14 +1,18 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Sparkles, Mail, Lock, Chrome, AlertCircle, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { sanitizeNextPath } from '@/lib/auth/safe-redirect-path'
+import { useCVStore } from '@/store/useCVStore'
 
 export default function LoginClient() {
     const router = useRouter()
     const searchParams = useSearchParams()
-    const nextPath = searchParams.get('next') ?? '/dashboard'
+    const nextPath = sanitizeNextPath(searchParams.get('next'), '/dashboard')
+    const user = useCVStore((s) => s.user)
+    const authHydrated = useCVStore((s) => s.authHydrated)
 
     const [mode, setMode] = useState<'signin' | 'signup'>('signin')
     const [email, setEmail] = useState('')
@@ -19,6 +23,11 @@ export default function LoginClient() {
     const [message, setMessage] = useState<string | null>(null)
 
     const supabase = createClient()
+
+    useEffect(() => {
+        if (!authHydrated || !user) return
+        router.replace(nextPath)
+    }, [authHydrated, user, nextPath, router])
 
     const handleEmailAuth = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -58,7 +67,7 @@ export default function LoginClient() {
             const { error: oauthError } = await supabase.auth.signInWithOAuth({
                 provider: 'google',
                 options: {
-                    redirectTo: `${window.location.origin}/auth/callback?next=${nextPath}`,
+                    redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`,
                 },
             })
             if (oauthError) throw oauthError

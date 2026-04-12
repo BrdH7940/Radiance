@@ -40,15 +40,15 @@ const NAV_ITEMS: NavItem[] = [
     },
 ]
 
-interface SidebarProps {
-    userEmail?: string | null
-    userInitial?: string
-}
-
-export function Sidebar({ userEmail, userInitial = '?' }: SidebarProps) {
+export function Sidebar() {
     const pathname = usePathname()
     const router = useRouter()
-    const { reset, setUser } = useCVStore()
+    const { reset, setUser, user } = useCVStore()
+
+    const userEmail = user?.email ?? null
+    const userInitial = userEmail
+        ? userEmail[0].toUpperCase()
+        : (user?.user_metadata?.full_name?.[0] ?? '?').toString().toUpperCase()
 
     const isActive = (href: string) => {
         if (href === '/dashboard') return pathname === '/dashboard'
