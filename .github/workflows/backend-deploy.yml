@@ -92,7 +92,28 @@ jobs:
                   SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
                   SUPABASE_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET }}
               run: |
+                  set -euo pipefail
+
+                  # Fail fast: never overwrite Lambda env with missing required secrets.
+                  missing=0
+                  for v in GOOGLE_API_KEY ANALYSIS_USER_ID AWS_S3_BUCKET DYNAMODB_ANALYSIS_TABLE_NAME SQS_QUEUE_URL SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY SUPABASE_JWT_SECRET CORS_ALLOWED_ORIGINS; do
+                    if [ -z "${!v:-}" ]; then
+                      echo "Missing required secret/env: $v"
+                      missing=1
+                    fi
+                  done
+                  if [ "$missing" -ne 0 ]; then
+                    echo "Aborting env sync to avoid wiping Lambda variables."
+                    exit 1
+                  fi
+
+                  # Read current Lambda env so optional/empty values don't wipe existing keys.
+                  CURRENT_VARS_JSON=$(aws lambda get-function-configuration \
+                    --function-name radiance-backend-api \
+                    | jq -c '.Environment.Variables // {}')
+
                   ENV_JSON=$(jq -n \
+                    --argjson current "$CURRENT_VARS_JSON" \
                     --arg a   "$ANALYSIS_USER_ID" \
                     --arg b   "$AWS_S3_BUCKET" \
                     --arg bx  "$AWS_XRAY_CONTEXT_MISSING" \
@@ -109,7 +130,8 @@ jobs:
                     --arg g   "$SUPABASE_URL" \
                     --arg h   "$SUPABASE_SERVICE_ROLE_KEY" \
                     --arg i   "$SUPABASE_JWT_SECRET" \
-                    '{Variables:{
+                    'def nonempty_only: with_entries(select(.value != "" and .value != null)); 
+                     ($current + ({
                       ANALYSIS_USER_ID:$a,
                       AWS_S3_BUCKET:$b,
                       AWS_XRAY_CONTEXT_MISSING:$bx,
@@ -127,7 +149,8 @@ jobs:
                       SUPABASE_URL:$g,
                       SUPABASE_SERVICE_ROLE_KEY:$h,
                       SUPABASE_JWT_SECRET:$i
-                    }}')
+                     } | nonempty_only)) as $vars
+                     | {Variables: $vars}')
 
                   aws lambda update-function-configuration \
                     --function-name radiance-backend-api \
