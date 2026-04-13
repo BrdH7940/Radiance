@@ -78,7 +78,9 @@ export default function LandingPage() {
                     <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-sm flex items-center justify-center">
                         <Zap size={18} fill="white" color="white" />
                     </div>
-                    <span className="text-xl font-bold tracking-[3px] uppercase">Radiance</span>
+                    <span className="text-xl font-bold tracking-[3px] uppercase">
+                        Radiance
+                    </span>
                 </div>
                 <GhostButton onClick={goToLogin}>Get started</GhostButton>
             </nav>
@@ -91,9 +93,18 @@ export default function LandingPage() {
                         <motion.div
                             key={i}
                             className="absolute bg-white rounded-full"
-                            style={{ width: p.width, height: p.height, left: p.left, top: p.top }}
+                            style={{
+                                width: p.width,
+                                height: p.height,
+                                left: p.left,
+                                top: p.top,
+                            }}
                             animate={{ y: [0, -100], opacity: [0, 1, 0] }}
-                            transition={{ duration: p.duration, repeat: Infinity, ease: 'linear' }}
+                            transition={{
+                                duration: p.duration,
+                                repeat: Infinity,
+                                ease: 'linear',
+                            }}
                         />
                     ))}
                 </div>
@@ -110,7 +121,9 @@ export default function LandingPage() {
                         Radiance bypasses the ATS barrier <br />
                         Using semantic intelligence and STAR alignment.
                     </p>
-                    <GhostButton onClick={goToLogin}>Launch Mission</GhostButton>
+                    <GhostButton onClick={goToLogin}>
+                        Launch Mission
+                    </GhostButton>
                 </motion.div>
                 <motion.div
                     animate={{ y: [0, 10, 0] }}
@@ -121,18 +134,19 @@ export default function LandingPage() {
                 </motion.div>
             </section>
 
-            {/* Feature 1: Semantic Evolution */}
+            {/* Feature 1: Semantic Alignment */}
             <section className="min-h-screen flex items-center px-8 md:px-24 bg-black">
                 <div className="grid md:grid-cols-2 gap-12 items-center w-full">
                     <div className="order-2 md:order-1 space-y-6">
-                        <span className="text-[10px] tracking-[4px] text-indigo-400 uppercase font-bold">Tech Stack 01</span>
+                        <span className="text-sm tracking-[4px] text-indigo-400 uppercase font-bold">
+                            01
+                        </span>
                         <h2 className="text-3xl md:text-5xl font-bold tracking-[4px] uppercase leading-tight">
-                            Semantic <br /> Evolution
+                            Semantic <br /> Alignment
                         </h2>
                         <p className="text-sm tracking-[1px] uppercase opacity-70 leading-relaxed max-w-md">
-                            We decode the meaning behind your experience. <br />
-                            Transforming raw profiles into structured data <br />
-                            That perfectly mirrors JD requirements.
+                            We read the JD and transform your CV <br />
+                            into a JD-specialized version.
                         </p>
                     </div>
                     <div className="order-1 md:order-2 flex justify-center">
@@ -148,14 +162,17 @@ export default function LandingPage() {
                         <SkillGapAnimation />
                     </div>
                     <div className="space-y-6">
-                        <span className="text-[10px] tracking-[4px] text-purple-400 uppercase font-bold">Analysis 02</span>
+                        <span className="text-sm tracking-[4px] text-purple-400 uppercase font-bold">
+                            02
+                        </span>
                         <h2 className="text-3xl md:text-5xl font-bold tracking-[4px] uppercase leading-tight">
                             Skill Gap <br /> Detection
                         </h2>
                         <p className="text-sm tracking-[1px] uppercase opacity-70 leading-relaxed max-w-md">
-                            Instantly identify missing keywords and skills. <br />
-                            We compare your CV against real market JDs <br />
-                            To highlight and bridge critical weaknesses.
+                            Instantly identify missing keywords and skills.{' '}
+                            <br />
+                            We compare your CV against the JD <br />
+                            to highlight and bridge critical weaknesses.
                         </p>
                     </div>
                 </div>
@@ -165,14 +182,15 @@ export default function LandingPage() {
             <section className="min-h-screen flex items-center px-8 md:px-24 bg-black">
                 <div className="grid md:grid-cols-2 gap-12 items-center w-full">
                     <div className="order-2 md:order-1 space-y-6">
-                        <span className="text-[10px] tracking-[4px] text-blue-400 uppercase font-bold">Refining 03</span>
+                        <span className="text-sm tracking-[4px] text-blue-400 uppercase font-bold">
+                            03
+                        </span>
                         <h2 className="text-3xl md:text-5xl font-bold tracking-[4px] uppercase leading-tight">
                             Automated <br /> STAR Polish
                         </h2>
                         <p className="text-sm tracking-[1px] uppercase opacity-70 leading-relaxed max-w-md">
-                            Bullet points rewritten for impact. <br />
-                            Situation, Task, Action, and Result <br />
-                            Built into every line of your experience.
+                            We rewrite your experience bullets <br />
+                            using the STAR methodology.
                         </p>
                     </div>
                     <div className="order-1 md:order-2 flex justify-center">
@@ -189,12 +207,16 @@ export default function LandingPage() {
                     transition={{ duration: 0.6 }}
                     className="space-y-8"
                 >
-                    <h2 className="text-3xl md:text-5xl font-bold tracking-[6px] uppercase">Ready to outshine?</h2>
+                    <h2 className="text-3xl md:text-5xl font-bold tracking-[6px] uppercase">
+                        Ready to Experience?
+                    </h2>
                     <p className="text-[12px] tracking-[2px] uppercase opacity-60">
-                        Join thousands of candidates reaching new heights.
+                        Join us to reach new heights.
                     </p>
                     <div className="flex flex-col md:flex-row gap-4 justify-center">
-                        <GhostButton onClick={goToLogin}>Get started now</GhostButton>
+                        <GhostButton onClick={goToLogin}>
+                            Get started now
+                        </GhostButton>
                     </div>
                 </motion.div>
             </section>
@@ -203,7 +225,7 @@ export default function LandingPage() {
             <footer className="py-12 px-8 border-t border-[#f0f0fa]/10 bg-black text-center">
                 <div className="max-w-7xl mx-auto flex flex-col items-center">
                     <div className="text-[10px] tracking-[2px] uppercase opacity-40">
-                        Radiance &copy; 2024 — Engineering the Future of Careers
+                        Radiance &copy; 2026 — Engineering the Future of Careers
                     </div>
                 </div>
             </footer>
