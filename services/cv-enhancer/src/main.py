@@ -20,6 +20,17 @@ from presentation.history import router as history_router
 from presentation.projects import router as projects_router
 from presentation.resumes import router as resumes_router
 
+# Best-effort observability bootstrap (never breaks local dev / CI).
+try:
+    from observability.langsmith import init_langsmith
+    from observability.xray import init_xray, instrument_fastapi
+
+    init_langsmith()
+    init_xray()
+except Exception:
+    # Observability must never prevent the app from importing.
+    pass
+
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
@@ -79,6 +90,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Attach X-Ray middleware (best-effort).
+try:
+    instrument_fastapi(app)
+except Exception:
+    pass
+
 # ── Routers ──────────────────────────────────────────────────────────────────
 app.include_router(resumes_router)   # POST   /api/v1/resumes/upload-urls
 app.include_router(analyses_router)  # POST   /api/v1/analyses  |  GET /api/v1/analyses/{id}
@@ -121,11 +138,25 @@ async def process_sqs_records(event: dict) -> None:
 
             logger.info("Worker processing Job ID: %s", job_id)
 
-            await use_case.execute(
-                job_id=job_id,
-                s3_key=s3_key,
-                jd_text=jd_text,
-            )
+            # Best-effort X-Ray subsegment per record/job.
+            try:
+                from observability.xray import annotate_kv, with_subsegment
+
+                annotate_kv("event_source", "sqs")
+                annotate_kv("job_id", job_id)
+                annotate_kv("s3_key", s3_key)
+                with with_subsegment("sqs_record"):
+                    await use_case.execute(
+                        job_id=job_id,
+                        s3_key=s3_key,
+                        jd_text=jd_text,
+                    )
+            except Exception:
+                await use_case.execute(
+                    job_id=job_id,
+                    s3_key=s3_key,
+                    jd_text=jd_text,
+                )
 
             logger.info("Successfully processed Job ID: %s", job_id)
         except Exception as exc:  # noqa: BLE001
