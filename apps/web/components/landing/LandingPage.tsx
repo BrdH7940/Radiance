@@ -135,9 +135,9 @@ export default function LandingPage() {
             </section>
 
             {/* Feature 1: Semantic Alignment */}
-            <section className="min-h-screen flex items-center px-8 md:px-24 bg-black">
-                <div className="grid md:grid-cols-2 gap-12 items-center w-full">
-                    <div className="order-2 md:order-1 space-y-6">
+            <section className="min-h-screen flex items-center px-6 sm:px-10 md:px-16 lg:px-24 bg-black py-16 md:py-0">
+                <div className="grid md:grid-cols-2 gap-y-14 gap-x-10 lg:gap-x-16 xl:gap-x-24 items-center w-full max-w-[1600px] mx-auto">
+                    <div className="order-2 md:order-1 space-y-6 md:max-w-lg lg:max-w-xl shrink-0">
                         <span className="text-sm tracking-[4px] text-indigo-400 uppercase font-bold">
                             01
                         </span>
@@ -149,19 +149,19 @@ export default function LandingPage() {
                             into a JD-specialized version.
                         </p>
                     </div>
-                    <div className="order-1 md:order-2 flex justify-center">
+                    <div className="order-1 md:order-2 flex justify-center items-center w-full min-h-[min(55vh,26rem)] md:min-h-[min(70vh,32rem)] lg:min-h-[36rem]">
                         <MatchingAnimation />
                     </div>
                 </div>
             </section>
 
             {/* Feature 2: Skill Gap Detection */}
-            <section className="min-h-screen flex items-center px-8 md:px-24 bg-gradient-to-r from-black to-[#0a0a2e]">
-                <div className="grid md:grid-cols-2 gap-12 items-center w-full">
-                    <div className="flex justify-center">
+            <section className="min-h-screen flex items-center px-6 sm:px-10 md:px-16 lg:px-24 bg-gradient-to-r from-black to-[#0a0a2e] py-16 md:py-0">
+                <div className="grid md:grid-cols-2 gap-y-14 gap-x-10 lg:gap-x-16 xl:gap-x-24 items-center w-full max-w-[1600px] mx-auto">
+                    <div className="flex justify-center items-center w-full min-h-[min(55vh,22rem)] md:min-h-[min(70vh,28rem)] lg:min-h-[32rem]">
                         <SkillGapAnimation />
                     </div>
-                    <div className="space-y-6">
+                    <div className="space-y-6 md:max-w-lg lg:max-w-xl shrink-0">
                         <span className="text-sm tracking-[4px] text-purple-400 uppercase font-bold">
                             02
                         </span>
@@ -179,9 +179,9 @@ export default function LandingPage() {
             </section>
 
             {/* Feature 3: STAR Enhancement */}
-            <section className="min-h-screen flex items-center px-8 md:px-24 bg-black">
-                <div className="grid md:grid-cols-2 gap-12 items-center w-full">
-                    <div className="order-2 md:order-1 space-y-6">
+            <section className="min-h-screen flex items-center px-6 sm:px-10 md:px-16 lg:px-24 bg-black py-16 md:py-0">
+                <div className="grid md:grid-cols-2 gap-y-14 gap-x-10 lg:gap-x-16 xl:gap-x-24 items-center w-full max-w-[1600px] mx-auto">
+                    <div className="order-2 md:order-1 space-y-6 md:max-w-lg lg:max-w-xl shrink-0">
                         <span className="text-sm tracking-[4px] text-blue-400 uppercase font-bold">
                             03
                         </span>
@@ -193,7 +193,7 @@ export default function LandingPage() {
                             using the STAR methodology.
                         </p>
                     </div>
-                    <div className="order-1 md:order-2 flex justify-center">
+                    <div className="order-1 md:order-2 flex justify-center items-center w-full min-h-[min(55vh,22rem)] md:min-h-[min(70vh,28rem)] lg:min-h-[32rem]">
                         <StarAnimation />
                     </div>
                 </div>

@@ -5,7 +5,11 @@ import { Cpu } from 'lucide-react'
 
 export default function MatchingAnimation() {
     return (
-        <svg viewBox="0 0 500 300" className="w-full max-w-xl">
+        <svg
+            viewBox="0 0 500 300"
+            className="w-full max-w-[min(100%,42rem)] lg:max-w-[min(100%,52rem)] xl:max-w-[min(100%,60rem)] h-auto aspect-[5/3]"
+            preserveAspectRatio="xMidYMid meet"
+        >
             <defs>
                 <linearGradient id="bad-grad" x1="0%" y1="0%" x2="100%" y2="0%">
                     <stop offset="0%" stopColor="#4b5563" />
@@ -29,7 +33,7 @@ export default function MatchingAnimation() {
                     animate={{ opacity: [0.4, 1, 0.4] }}
                     transition={{ repeat: Infinity, duration: 2 }}
                 />
-                <text x="100" y="245" textAnchor="middle" fill="#f0f0fa" fontSize="10" fontWeight="bold" letterSpacing="2" opacity="0.5" textDecoration="uppercase">Raw Profile</text>
+                <text x="100" y="245" textAnchor="middle" fill="#f0f0fa" fontSize="12" fontWeight="bold" letterSpacing="2" opacity="0.5">Raw Profile</text>
             </motion.g>
 
             <motion.g transform="translate(250, 150)">
@@ -45,8 +49,8 @@ export default function MatchingAnimation() {
                     <circle cx="40" cy="0" r="4" fill="#a855f7" />
                     <circle cx="-40" cy="0" r="4" fill="#6366f1" />
                 </motion.g>
-                <foreignObject x="-12" y="-12" width="24" height="24">
-                    <Cpu size={24} color="#f0f0fa" />
+                <foreignObject x="-16" y="-16" width="32" height="32">
+                    <Cpu size={32} color="#f0f0fa" />
                 </foreignObject>
             </motion.g>
 
@@ -77,7 +81,7 @@ export default function MatchingAnimation() {
                     animate={{ scale: [1, 1.3, 1] }}
                     transition={{ repeat: Infinity, duration: 1.5 }}
                 />
-                <text x="405" y="255" textAnchor="middle" fill="#f0f0fa" fontSize="10" fontWeight="bold" letterSpacing="2">Optimized CV</text>
+                <text x="405" y="255" textAnchor="middle" fill="#f0f0fa" fontSize="12" fontWeight="bold" letterSpacing="2">Optimized CV</text>
             </motion.g>
         </svg>
     )
