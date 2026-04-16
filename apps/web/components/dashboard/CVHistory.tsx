@@ -21,7 +21,7 @@ function ScoreBadge({ score }: { score: number | null }) {
 
     return (
         <span
-            className={`inline-flex items-center px-2.5 py-1 rounded-full border text-xs font-bold tabular-nums ${color}`}
+            className={`inline-flex items-center px-2.5 py-1 rounded-none border-4 border-black text-xs font-bold tabular-nums ${color}`}
         >
             {score}%
         </span>
@@ -48,18 +48,18 @@ function HistoryCard({ entry, onOpen, loading }: HistoryCardProps) {
             type="button"
             onClick={() => onOpen(entry.id)}
             disabled={loading}
-            className="w-full text-left group rounded-2xl border border-white/8 bg-white/2 hover:bg-white/5 hover:border-white/14 p-5 transition-all duration-200 disabled:opacity-60"
+            className="w-full text-left group rounded-none border-4 border-black bg-[#FBFBF9] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[4px] hover:translate-y-[4px] p-5 transition-all duration-200 disabled:opacity-60"
         >
             <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1.5">
                         {entry.job_title ? (
-                            <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-white truncate">
+                            <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#1C293C] truncate">
                                 <Briefcase className="w-3.5 h-3.5 text-blue-400 shrink-0" />
                                 {entry.job_title}
                             </span>
                         ) : (
-                            <span className="text-sm font-semibold text-slate-500">
+                            <span className="text-sm font-semibold text-[#1C293C]">
                                 Untitled analysis
                             </span>
                         )}
@@ -68,18 +68,18 @@ function HistoryCard({ entry, onOpen, loading }: HistoryCardProps) {
                     {entry.company_name && (
                         <div className="flex items-center gap-1.5 mb-2">
                             <Building2 className="w-3 h-3 text-slate-600 shrink-0" />
-                            <span className="text-xs text-slate-500 truncate">
+                            <span className="text-xs text-[#4B5563] truncate">
                                 {entry.company_name}
                             </span>
                         </div>
                     )}
 
-                    <span className="text-xs text-slate-700">{date}</span>
+                    <span className="text-xs text-[#4B5563]">{date}</span>
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
                     <ScoreBadge score={entry.matching_score} />
-                    <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-slate-400 group-hover:translate-x-0.5 transition-all" />
+                    <ChevronRight className="w-4 h-4 text-[#1C293C] group-hover:text-[#432DD7] group-hover:translate-x-0.5 transition-all" />
                 </div>
             </div>
         </button>
@@ -154,10 +154,10 @@ export function CVHistory() {
         <div className="px-6 sm:px-8 pt-10 pb-20">
             {/* Header */}
             <div className="mb-8 animate-in fade-in slide-in-from-bottom-6 duration-500">
-                <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-white mb-2">
+                <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-[#1C293C] mb-2">
                     CV History
                 </h1>
-                <p className="text-slate-400 text-sm">
+                <p className="text-[#4B5563] text-sm">
                     Browse your previous CV enhancements. Click any entry to restore it
                     in the workspace.
                 </p>
@@ -165,7 +165,7 @@ export function CVHistory() {
 
             {/* Error */}
             {error && (
-                <div className="flex items-center gap-3 px-4 py-3 mb-6 rounded-xl border border-red-500/30 bg-red-500/5">
+                <div className="flex items-center gap-3 px-4 py-3 mb-6 rounded-none border-4 border-black bg-[#FBFBF9] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                     <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
                     <p className="text-sm text-red-400">{error}</p>
                 </div>
@@ -177,7 +177,7 @@ export function CVHistory() {
                     {[...Array(4)].map((_, i) => (
                         <div
                             key={i}
-                            className="rounded-2xl border border-white/8 bg-white/2 p-5 h-20 animate-pulse"
+                            className="rounded-none border-4 border-black bg-[#FBFBF9] p-5 h-20 animate-pulse"
                         />
                     ))}
                 </div>
@@ -186,13 +186,13 @@ export function CVHistory() {
             {/* Empty state */}
             {!loading && history.length === 0 && !error && (
                 <div className="flex flex-col items-center justify-center py-24 text-center animate-in fade-in duration-500">
-                    <div className="p-4 rounded-2xl bg-white/3 border border-white/8 mb-4">
+                        <div className="p-4 rounded-none bg-[#FBFBF9] border-4 border-black mb-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                         <History className="w-8 h-8 text-slate-600" />
                     </div>
-                    <h3 className="text-base font-semibold text-slate-400 mb-1">
+                        <h3 className="text-base font-semibold text-[#4B5563] mb-1">
                         No history yet
                     </h3>
-                    <p className="text-sm text-slate-600 max-w-xs">
+                        <p className="text-sm text-[#4B5563] max-w-xs">
                         Your CV enhancements will appear here once you complete an
                         analysis.
                     </p>
