@@ -14,14 +14,14 @@ interface NavBarProps {
 
 export function NavBar({ activeStep = 1 }: NavBarProps) {
     return (
-        <nav className="sticky top-0 z-50 h-20 flex items-center border-b border-white/5 backdrop-blur-3xl bg-midnight/60">
+        <nav className="sticky top-0 z-50 h-20 flex items-center border-b-4 border-black bg-[#FBFBF9]">
             <div className="w-full max-w-screen-xl mx-auto px-8 flex items-center justify-between">
                 {/* Brand */}
                 <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-violet-600 flex items-center justify-center shadow-lg shadow-blue-900/40">
-                        <Zap className="w-4 h-4 text-white" strokeWidth={2.5} />
+                    <div className="w-8 h-8 border-4 border-black bg-[#FDC800] flex items-center justify-center shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                        <Zap className="w-4 h-4 text-black" strokeWidth={2.5} />
                     </div>
-                    <span className="text-white font-black tracking-tighter text-xl">
+                    <span className="text-[#1C293C] font-black tracking-tighter text-xl">
                         Radiance
                     </span>
                 </div>
@@ -39,25 +39,25 @@ export function NavBar({ activeStep = 1 }: NavBarProps) {
                             >
                                 <div
                                     className={`
-                    flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all duration-500
+                    flex items-center gap-2 px-3 py-1.5 rounded-none transition-all duration-500
                     ${
                         isActive
-                            ? 'bg-blue-600/20 border border-blue-500/40 text-blue-300'
+                            ? 'bg-[#432DD7] border-4 border-black text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
                             : isDone
-                              ? 'bg-white/5 border border-white/10 text-slate-400'
-                              : 'border border-transparent text-slate-600'
+                              ? 'bg-[#FBFBF9] border-4 border-black text-[#1C293C]'
+                              : 'bg-[#FBFBF9] border-4 border-black text-[#1C293C]'
                     }
                   `}
                                 >
                                     <span
                                         className={`
-                      w-5 h-5 rounded-md flex items-center justify-center text-xs font-bold transition-all duration-500
+                      w-5 h-5 rounded-none flex items-center justify-center text-xs font-bold transition-all duration-500
                       ${
                           isActive
-                              ? 'bg-blue-500 text-white'
+                              ? 'bg-[#FDC800] text-black'
                               : isDone
-                                ? 'bg-slate-700 text-slate-300'
-                                : 'bg-white/5 text-slate-600'
+                                ? 'bg-[#FBFBF9] text-[#1C293C]'
+                                : 'bg-[#FBFBF9] text-[#1C293C]'
                       }
                     `}
                                     >
@@ -77,9 +77,9 @@ export function NavBar({ activeStep = 1 }: NavBarProps) {
                 </div>
 
                 {/* Status badge */}
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/5">
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-none border-4 border-black bg-[#16A34A]">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    <span className="text-sm font-medium text-emerald-400 tracking-wider">
+                    <span className="text-sm font-medium text-[#FBFBF9] tracking-wider">
                         Model Active
                     </span>
                 </div>

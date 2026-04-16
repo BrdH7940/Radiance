@@ -65,13 +65,13 @@ export function Sidebar() {
     }
 
     return (
-        <aside className="flex flex-col w-64 shrink-0 h-screen sticky top-0 border-r border-white/6 bg-midnight/80 backdrop-blur-sm">
+        <aside className="flex flex-col w-64 shrink-0 h-screen sticky top-0 border-r-4 border-black bg-[#FBFBF9]">
             {/* Logo */}
-            <div className="flex items-center gap-2.5 px-5 py-5 border-b border-white/6">
-                <div className="p-1.5 rounded-lg bg-gradient-to-br from-blue-500/20 to-violet-500/20 border border-blue-500/20">
-                    <Sparkles className="w-4 h-4 text-blue-400" />
+            <div className="flex items-center gap-2.5 px-5 py-5 border-b-4 border-black">
+                <div className="p-1.5 rounded-none bg-[#FDC800] border-4 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                    <Sparkles className="w-4 h-4 text-black" />
                 </div>
-                <span className="text-base font-black tracking-tight text-white">
+                <span className="text-base font-black tracking-tight text-[#1C293C]">
                     Radiance
                 </span>
             </div>
@@ -86,33 +86,33 @@ export function Sidebar() {
                             key={item.href}
                             href={item.href}
                             className={`
-                                group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
+                                group flex items-center gap-3 px-3 py-2.5 rounded-none text-sm font-medium transition-all duration-200 border-4 border-black
                                 ${
                                     active
-                                        ? 'bg-blue-500/10 border border-blue-500/20 text-blue-300'
-                                        : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-transparent'
+                                        ? 'bg-[#432DD7] text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
+                                        : 'bg-[#FBFBF9] text-[#1C293C] hover:text-[#1C293C] hover:bg-[#FDC800]'
                                 }
                             `}
                         >
                             <Icon
                                 className={`w-4 h-4 shrink-0 transition-colors ${
                                     active
-                                        ? 'text-blue-400'
-                                        : 'text-slate-500 group-hover:text-slate-300'
+                                        ? 'text-[#FDC800]'
+                                        : 'text-[#1C293C] group-hover:text-[#1C293C]'
                                 }`}
                             />
                             <div className="flex-1 min-w-0">
                                 <div className="truncate">{item.label}</div>
                                 <div
                                     className={`text-xs truncate mt-0.5 ${
-                                        active ? 'text-blue-400/70' : 'text-slate-600'
+                                        active ? 'text-[#FDC800]' : 'text-[#1C293C]'
                                     }`}
                                 >
                                     {item.description}
                                 </div>
                             </div>
                             {active && (
-                                <ChevronRight className="w-3.5 h-3.5 text-blue-400/60 shrink-0" />
+                                <ChevronRight className="w-3.5 h-3.5 text-[#FDC800] shrink-0" />
                             )}
                         </Link>
                     )
@@ -120,13 +120,13 @@ export function Sidebar() {
             </nav>
 
             {/* User profile + sign-out */}
-            <div className="px-3 pb-4 border-t border-white/6 pt-3">
-                <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
+            <div className="px-3 pb-4 border-t-4 border-black pt-3">
+                <div className="flex items-center gap-3 px-3 py-2.5 rounded-none border-4 border-black bg-white">
+                    <div className="w-8 h-8 rounded-none bg-[#FDC800] flex items-center justify-center text-[#1C293C] text-xs font-bold shrink-0 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
                         {userInitial}
                     </div>
                     <div className="flex-1 min-w-0">
-                        <p className="text-xs text-slate-300 font-medium truncate">
+                        <p className="text-xs text-[#1C293C] font-medium truncate">
                             {userEmail ?? 'User'}
                         </p>
                         <p className="text-xs text-slate-600 truncate">
@@ -137,7 +137,7 @@ export function Sidebar() {
                         type="button"
                         onClick={handleSignOut}
                         title="Sign out"
-                        className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-400/10 transition-all duration-200 shrink-0"
+                        className="p-1.5 rounded-none text-slate-600 hover:text-red-600 hover:bg-red-400/10 transition-all duration-200 border-4 border-black shrink-0"
                     >
                         <LogOut className="w-4 h-4" />
                     </button>
