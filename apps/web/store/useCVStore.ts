@@ -31,6 +31,7 @@ export interface CVStore {
     phase: AppPhase
     loadingStepIndex: number
     loadingSteps: typeof LOADING_STEPS
+    inputReviewMode: boolean
 
     // Actions
     setUser: (user: User | null) => void
@@ -43,12 +44,13 @@ export interface CVStore {
     setPdfUrl: (url: string) => void
     setPhase: (phase: AppPhase) => void
     setLoadingStepIndex: (index: number) => void
+    setInputReviewMode: (enabled: boolean) => void
     reset: () => void
 }
 
 // ─── Initial state ────────────────────────────────────────────────────────────
 
-const initialState: Pick<CVStore, 'user' | 'authHydrated' | 'cvFile' | 'jdText' | 'jobId' | 'analysisResult' | 'cvData' | 'pdfUrl' | 'phase' | 'loadingStepIndex' | 'loadingSteps'> = {
+const initialState: Pick<CVStore, 'user' | 'authHydrated' | 'cvFile' | 'jdText' | 'jobId' | 'analysisResult' | 'cvData' | 'pdfUrl' | 'phase' | 'loadingStepIndex' | 'loadingSteps' | 'inputReviewMode'> = {
     user: null,
     authHydrated: false,
     cvFile: null,
@@ -60,6 +62,7 @@ const initialState: Pick<CVStore, 'user' | 'authHydrated' | 'cvFile' | 'jdText' 
     phase: 'upload' as AppPhase,
     loadingStepIndex: 0,
     loadingSteps: LOADING_STEPS,
+    inputReviewMode: false,
 }
 
 // ─── Store ────────────────────────────────────────────────────────────────────
@@ -77,6 +80,7 @@ export const useCVStore = create<CVStore>((set) => ({
     setPdfUrl: (url) => set({ pdfUrl: url }),
     setPhase: (phase) => set({ phase }),
     setLoadingStepIndex: (index) => set({ loadingStepIndex: index }),
+    setInputReviewMode: (inputReviewMode) => set({ inputReviewMode }),
 
     // reset() only clears CV-analysis state — user auth is preserved.
     reset: () =>

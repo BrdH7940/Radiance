@@ -99,7 +99,7 @@ except Exception:
 # ── Routers ──────────────────────────────────────────────────────────────────
 app.include_router(resumes_router)   # POST   /api/v1/resumes/upload-urls
 app.include_router(analyses_router)  # POST   /api/v1/analyses  |  GET /api/v1/analyses/{id}
-app.include_router(editor_router)    # POST   /api/v1/editor/refinements  |  /renders
+app.include_router(editor_router)    # POST   /api/v1/editor/renders
 app.include_router(projects_router)  # CRUD   /api/v1/projects
 app.include_router(history_router)   # GET    /api/v1/history  |  /history/{id}
 

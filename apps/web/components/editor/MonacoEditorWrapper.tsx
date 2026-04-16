@@ -15,7 +15,7 @@ const MonacoEditor = dynamic(() => import('@monaco-editor/react'), {
 
 export interface SelectionInfo {
     selectedText: string
-    /** Viewport-relative pixel position (for FloatingAIMenu placement). */
+    /** Viewport-relative pixel position for any selection-aware UI. */
     screenPosition: { top: number; left: number }
     /** Stored Monaco selection range so we can apply edits later. */
     monacoSelection: {
@@ -53,42 +53,42 @@ const LATEX_TOKENS = {
     },
 }
 
-// ─── Custom dark theme ────────────────────────────────────────────────────────
+// ─── Custom neobrutalist theme ────────────────────────────────────────────────
 
 const RADIANCE_THEME = {
-    base: 'vs-dark' as const,
+    base: 'vs' as const,
     inherit: true,
     rules: [
-        { token: 'comment', foreground: '374151', fontStyle: 'italic' },
-        { token: 'keyword.control', foreground: 'A78BFA' },
-        { token: 'keyword', foreground: '818CF8' },
-        { token: 'keyword.operator', foreground: 'F59E0B' },
-        { token: 'string.math', foreground: '34D399' },
-        { token: 'delimiter.bracket', foreground: '64748B' },
-        { token: 'delimiter.square', foreground: '64748B' },
-        { token: 'number', foreground: 'FB923C' },
-        { token: '', foreground: 'CBD5E1' },
+        { token: 'comment', foreground: '6B7280', fontStyle: 'italic' },
+        { token: 'keyword.control', foreground: '432DD7' },
+        { token: 'keyword', foreground: '1C293C' },
+        { token: 'keyword.operator', foreground: 'DC2626' },
+        { token: 'string.math', foreground: '16A34A' },
+        { token: 'delimiter.bracket', foreground: '1C293C' },
+        { token: 'delimiter.square', foreground: '1C293C' },
+        { token: 'number', foreground: 'B45309' },
+        { token: '', foreground: '1C293C' },
     ],
     colors: {
-        'editor.background': '#05070a',
-        'editor.foreground': '#CBD5E1',
-        'editor.lineHighlightBackground': '#ffffff06',
-        'editor.selectionBackground': '#3B82F640',
-        'editor.inactiveSelectionBackground': '#3B82F620',
-        'editorLineNumber.foreground': '#1E293B',
-        'editorLineNumber.activeForeground': '#475569',
-        'editorCursor.foreground': '#818CF8',
-        'editorGutter.background': '#05070a',
-        'editorWidget.background': '#0f172a',
-        'editorWidget.border': '#1e293b',
-        'editorSuggestWidget.background': '#0f172a',
-        'editorSuggestWidget.border': '#1e293b',
-        'editorIndentGuide.background1': '#1e293b40',
+        'editor.background': '#FBFBF9',
+        'editor.foreground': '#1C293C',
+        'editor.lineHighlightBackground': '#FDC80022',
+        'editor.selectionBackground': '#432DD733',
+        'editor.inactiveSelectionBackground': '#432DD71A',
+        'editorLineNumber.foreground': '#6B7280',
+        'editorLineNumber.activeForeground': '#1C293C',
+        'editorCursor.foreground': '#1C293C',
+        'editorGutter.background': '#FBFBF9',
+        'editorWidget.background': '#FBFBF9',
+        'editorWidget.border': '#000000',
+        'editorSuggestWidget.background': '#FBFBF9',
+        'editorSuggestWidget.border': '#000000',
+        'editorIndentGuide.background1': '#00000020',
         'scrollbar.shadow': '#00000000',
-        'scrollbarSlider.background': '#e5e7eb66',
-        'scrollbarSlider.hoverBackground': '#e5e7eb99',
-        'scrollbarSlider.activeBackground': '#f9fafbcc',
-        'minimap.background': '#05070a',
+        'scrollbarSlider.background': '#00000066',
+        'scrollbarSlider.hoverBackground': '#00000099',
+        'scrollbarSlider.activeBackground': '#000000cc',
+        'minimap.background': '#FBFBF9',
     },
 }
 
@@ -190,7 +190,7 @@ export function MonacoEditorWrapper({
     )
 
     return (
-        <div className="h-full w-full">
+        <div className="h-full w-full border-4 border-black bg-[#FBFBF9] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
             <MonacoEditor
                 height="100%"
                 defaultLanguage="latex"
@@ -239,16 +239,16 @@ export function MonacoEditorWrapper({
 
 function EditorSkeleton() {
     return (
-        <div className="h-full w-full bg-[#05070a] flex flex-col gap-3 p-6 overflow-hidden">
+        <div className="h-full w-full bg-[#FBFBF9] flex flex-col gap-3 p-6 overflow-hidden border-4 border-black">
             {/* Line number + code skeleton rows */}
             {Array.from({ length: 22 }).map((_, i) => (
                 <div key={i} className="flex items-center gap-4">
                     <div
-                        className="w-5 h-3 rounded bg-white/5 shrink-0"
+                        className="w-5 h-3 bg-black/10 shrink-0"
                         style={{ opacity: 0.3 + (i % 3) * 0.15 }}
                     />
                     <div
-                        className="h-3 rounded bg-white/5"
+                        className="h-3 bg-black/10"
                         style={{
                             width: `${20 + ((i * 37 + 13) % 60)}%`,
                             opacity: 0.15 + (i % 4) * 0.05,

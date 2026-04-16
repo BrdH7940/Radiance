@@ -2,7 +2,7 @@
  * API services and types aligned with the FastAPI backend.
  *
  * - AnalysisService: upload URL, S3 upload, trigger analysis, poll job status.
- * - Workspace: uploadAndAnalyze (orchestrated), aiRefineText, renderCvToPdf.
+ * - Workspace: uploadAndAnalyze (orchestrated), renderCvToPdf.
  */
 
 import { createClient } from '@/lib/supabase/client'
@@ -149,11 +149,6 @@ export interface AnalysisStatusResponse {
     status: JobStatus
     error: string | null
     result: AnalysisResultDTO | null
-}
-
-/** Editor */
-export interface AIEditResult {
-    newText: string
 }
 
 export interface EditorRenderResponse {
@@ -315,32 +310,6 @@ export async function uploadAndAnalyze(
 }
 
 // ─── Workspace / editor APIs ──────────────────────────────────────────────────
-
-/**
- * AI rewrite of a plain-text CV field snippet (POST /api/v1/editor/refinements).
- */
-export async function aiRefineText(
-    selectedText: string,
-    prompt: string
-): Promise<AIEditResult> {
-    const token = await getSupabaseToken()
-    const res = await fetch(`${API_BASE}/api/v1/editor/refinements`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ selected_text: selectedText, prompt }),
-    })
-
-    if (!res.ok) {
-        const body = await res.text()
-        throw new Error(body || `Refinement failed (${res.status})`)
-    }
-
-    const data = (await res.json()) as { new_text: string }
-    return { newText: data.new_text }
-}
 
 /**
  * Render CVResumeSchema to PDF on the server (POST /api/v1/editor/renders).

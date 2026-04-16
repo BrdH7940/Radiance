@@ -200,72 +200,72 @@ export function PDFPreview({
     }, [onTextDoubleClick])
 
     return (
-        <div className="relative h-full w-full bg-[#020617] flex flex-col overflow-hidden">
+        <div className="relative h-full w-full bg-[#FBFBF9] flex flex-col overflow-hidden">
             {/* Top chrome bar (mimics PDF viewer chrome) */}
-            <div className="shrink-0 flex items-center justify-between px-4 py-2 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-slate-700/60 shadow-[0_8px_30px_rgba(15,23,42,0.6)]">
+            <div className="shrink-0 flex items-center justify-between px-4 py-2 bg-[#FBFBF9] border-b-4 border-black">
                 <div className="flex items-center gap-2">
-                    <div className="flex items-center justify-center w-6 h-6 rounded-full bg-indigo-500/20 border border-indigo-400/40">
+                    <div className="flex items-center justify-center w-8 h-8 border-4 border-black bg-[#FDC800] shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
                         <FileText
-                            className="w-3.5 h-3.5 text-indigo-200"
-                            strokeWidth={1.6}
+                            className="w-4 h-4 text-black"
+                            strokeWidth={1.8}
                         />
                     </div>
-                    <span className="text-sm uppercase tracking-[0.16em] text-slate-300 font-semibold">
+                    <span className="text-sm uppercase tracking-[0.16em] text-[#1C293C] font-semibold">
                         PDF Preview
                     </span>
                 </div>
 
-                <div className="flex items-center gap-4 text-xs text-slate-200">
+                <div className="flex items-center gap-4 text-xs text-[#1C293C]">
                     {/* Zoom controls */}
-                    <div className="flex items-center gap-1.5 rounded-full bg-slate-900/60 px-2 py-1 border border-slate-700/70 shadow-inner shadow-black/40">
+                    <div className="flex items-center gap-1.5 px-2 py-1 border-4 border-black bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
                         <button
                             type="button"
                             onClick={handleZoomOut}
-                            className="w-6 h-6 flex items-center justify-center rounded-full bg-slate-800 hover:bg-slate-700 text-[12px] text-slate-100 border border-slate-600/70 transition-colors"
+                            className="w-6 h-6 flex items-center justify-center border-4 border-black bg-[#FBFBF9] text-[12px] text-[#1C293C] hover:bg-[#FDC800] transition-colors"
                         >
                             -
                         </button>
-                        <span className="min-w-[38px] text-center text-sm font-medium text-slate-100">
+                        <span className="min-w-[38px] text-center text-sm font-medium text-[#1C293C]">
                             {zoom}%
                         </span>
                         <button
                             type="button"
                             onClick={handleZoomIn}
-                            className="w-6 h-6 flex items-center justify-center rounded-full bg-slate-800 hover:bg-slate-700 text-[12px] text-slate-100 border border-slate-600/70 transition-colors"
+                            className="w-6 h-6 flex items-center justify-center border-4 border-black bg-[#FBFBF9] text-[12px] text-[#1C293C] hover:bg-[#FDC800] transition-colors"
                         >
                             +
                         </button>
                     </div>
 
                     {/* Page navigation */}
-                    <div className="flex items-center gap-1.5 rounded-full bg-slate-900/60 px-2 py-1 border border-slate-700/70 shadow-inner shadow-black/40">
+                    <div className="flex items-center gap-1.5 px-2 py-1 border-4 border-black bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
                         <button
                             type="button"
                             onClick={handlePrevPage}
                             disabled={page <= 1}
-                            className="w-6 h-6 flex items-center justify-center rounded-full bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed border border-slate-600/70 transition-colors"
+                            className="w-6 h-6 flex items-center justify-center border-4 border-black bg-[#FBFBF9] hover:bg-[#FDC800] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                         >
-                            <ChevronLeft className="w-3 h-3 text-slate-100" />
+                            <ChevronLeft className="w-3 h-3 text-[#1C293C]" />
                         </button>
-                        <span className="min-w-[52px] text-center text-[13px] font-medium text-slate-100">
+                        <span className="min-w-[52px] text-center text-[13px] font-medium text-[#1C293C]">
                             {page} / {totalPages}
                         </span>
                         <button
                             type="button"
                             onClick={handleNextPage}
                             disabled={page >= totalPages}
-                            className="w-6 h-6 flex items-center justify-center rounded-full bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed border border-slate-600/70 transition-colors"
+                            className="w-6 h-6 flex items-center justify-center border-4 border-black bg-[#FBFBF9] hover:bg-[#FDC800] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                         >
-                            <ChevronRight className="w-3 h-3 text-slate-100" />
+                            <ChevronRight className="w-3 h-3 text-[#1C293C]" />
                         </button>
                     </div>
                 </div>
             </div>
 
             {/* Scrollable paper area */}
-            <div className="flex-1 overflow-y-auto py-4 px-4 flex justify-center items-start min-h-0">
+            <div className="flex-1 overflow-y-auto py-4 px-4 flex justify-center items-start min-h-0 bg-[#F3F0E8]">
                 {showPdfFrame ? (
-                    <div className="relative w-full h-full min-h-[600px] rounded-md overflow-hidden bg-slate-900">
+                    <div className="relative w-full h-full min-h-[600px] overflow-hidden bg-white border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                         <iframe
                             src={pdfUrl}
                             title="Compiled PDF"
@@ -274,7 +274,7 @@ export function PDFPreview({
                     </div>
                 ) : (
                 <div
-                    className="relative bg-white shadow-[0_18px_60px_rgba(15,23,42,0.9)] rounded-md w-[720px] max-w-full min-h-[900px] mx-auto"
+                    className="relative bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-[720px] max-w-full min-h-[900px] mx-auto"
                     style={{
                         fontFamily: 'Georgia, "Times New Roman", serif',
                         transform: `scale(${zoom / 100})`,
@@ -283,8 +283,8 @@ export function PDFPreview({
                 >
                     {/* Compile overlay */}
                     {isCompiling && (
-                        <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center gap-3">
-                            <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+                        <div className="absolute inset-0 bg-white/90 z-10 flex flex-col items-center justify-center gap-3">
+                            <Loader2 className="w-8 h-8 text-[#432DD7] animate-spin" />
                             <span className="text-sm font-medium text-slate-500">
                                 Compiling LaTeX…
                             </span>

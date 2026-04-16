@@ -23,8 +23,10 @@ export default function EnhanceCVPage() {
         cvFile,
         jdText,
         phase,
+        inputReviewMode,
         analysisResult,
         setPhase,
+        setInputReviewMode,
         setLoadingStepIndex,
         setJobId,
         setAnalysisResult,
@@ -51,6 +53,7 @@ export default function EnhanceCVPage() {
         }
 
         setValidationError(null)
+        setInputReviewMode(false)
         setPhase('analyzing')
 
         const result = await uploadAndAnalyze(
@@ -177,10 +180,10 @@ export default function EnhanceCVPage() {
                 style={{ animationDelay: '150ms' }}
             >
                 <div className="min-h-[460px] border-4 border-black bg-[#FBFBF9] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-6">
-                    <CVDropzone />
+                    <CVDropzone reviewMode={inputReviewMode} />
                 </div>
                 <div className="min-h-[460px] border-4 border-black bg-[#FBFBF9] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-6">
-                    <JDTextarea />
+                    <JDTextarea readOnly={inputReviewMode} />
                 </div>
             </div>
 
