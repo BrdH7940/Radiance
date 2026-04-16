@@ -22,9 +22,10 @@ function GhostButton({ children, onClick, type = 'button', disabled = false, cla
             type={type}
             onClick={onClick}
             disabled={disabled}
-            className={`px-8 py-4 rounded-full border border-[rgba(240,240,250,0.35)] bg-[rgba(240,240,250,0.1)]
-                       text-[#f0f0fa] uppercase tracking-[1.17px] font-bold text-[13px]
-                       hover:bg-[rgba(240,240,250,0.2)] hover:border-[#f0f0fa] transition-all duration-300
+            className={`px-8 py-4 border-4 border-black rounded-none bg-[#FDC800]
+                       text-[#1C293C] uppercase tracking-[1.17px] font-bold text-[13px]
+                       shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[4px] hover:translate-y-[4px]
+                       transition-all active:bg-opacity-90 duration-300
                        disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
         >
             {children}
@@ -103,7 +104,7 @@ export default function LoginClient() {
     }
 
     return (
-        <div className="min-h-screen bg-[#000000] text-[#f0f0fa] flex flex-col items-center justify-center p-6 font-sans">
+        <div className="min-h-screen bg-[#FBFBF9] text-[#1C293C] flex flex-col items-center justify-center p-6 font-sans selection:bg-[#432DD7] selection:text-white">
             <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -113,23 +114,23 @@ export default function LoginClient() {
                 {/* Header */}
                 <div className="text-center space-y-3">
                     <div className="flex justify-center mb-4">
-                        <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-sm flex items-center justify-center">
-                            <Zap size={20} fill="white" color="white" />
+                        <div className="w-10 h-10 border-4 border-black bg-[#FDC800] flex items-center justify-center shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                            <Zap size={20} fill="black" color="black" />
                         </div>
                     </div>
                     <h1 className="text-3xl font-bold tracking-[4px] uppercase">Radiance</h1>
-                    <p className="text-[12px] tracking-[1px] text-indigo-300 uppercase">Mission Control Access</p>
+                    <p className="text-[12px] tracking-[1px] text-[#1C293C] uppercase">Mission Control Access</p>
                 </div>
 
                 {/* Error / Success messages */}
                 {error && (
-                    <div className="flex items-start gap-3 px-4 py-3 rounded-xl border border-red-500/30 bg-red-500/5">
+                    <div className="flex items-start gap-3 px-4 py-3 rounded-none border-4 border-red-500/30 bg-red-500/5">
                         <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
                         <p className="text-sm text-red-400">{error}</p>
                     </div>
                 )}
                 {message && (
-                    <div className="px-4 py-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5">
+                    <div className="px-4 py-3 rounded-none border-4 border-emerald-500/30 bg-emerald-500/5">
                         <p className="text-sm text-emerald-400">{message}</p>
                     </div>
                 )}
@@ -141,7 +142,9 @@ export default function LoginClient() {
                         type="button"
                         onClick={handleGoogleLogin}
                         disabled={googleLoading || loading}
-                        className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-full border border-[rgba(240,240,250,0.35)] bg-[rgba(240,240,250,0.05)] text-[#f0f0fa] text-[13px] font-bold uppercase tracking-[1.17px] hover:bg-[rgba(240,240,250,0.15)] hover:border-[#f0f0fa] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-none border-4 border-black bg-white text-[#1C293C] text-[13px] font-bold uppercase tracking-[1.17px]
+                                   shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[4px] hover:translate-y-[4px]
+                                   transition-all active:bg-opacity-90 duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {googleLoading ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
@@ -170,7 +173,7 @@ export default function LoginClient() {
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 placeholder="EMAIL"
-                                className="w-full bg-transparent border-b border-[#f0f0fa]/30 py-2 focus:outline-none focus:border-indigo-500 transition-colors text-sm placeholder:text-[#f0f0fa]/30"
+                                className="w-full bg-white border-4 border-black p-3 rounded-none focus:outline-none focus:bg-[#FDC800] transition-colors text-sm placeholder:text-[#1C293C]/40"
                             />
                         </div>
                         <div className="space-y-2">
@@ -184,7 +187,7 @@ export default function LoginClient() {
                                 onChange={(e) => setPassword(e.target.value)}
                                 placeholder="PASSWORD"
                                 minLength={6}
-                                className="w-full bg-transparent border-b border-[#f0f0fa]/30 py-2 focus:outline-none focus:border-indigo-500 transition-colors text-sm placeholder:text-[#f0f0fa]/30"
+                                className="w-full bg-white border-4 border-black p-3 rounded-none focus:outline-none focus:bg-[#FDC800] transition-colors text-sm placeholder:text-[#1C293C]/40"
                             />
                         </div>
                         <GhostButton type="submit" disabled={loading || googleLoading} className="w-full">
