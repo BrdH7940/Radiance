@@ -1,67 +1,23 @@
 """
 FastAPI router for the workspace editor:
-  - Refinements: AI plain-text rewrite of individual CV field snippets.
-  - Renders:     CVResumeSchema JSON → HTML → PDF (WeasyPrint) → S3 presigned URL.
+  - Renders: CVResumeSchema JSON → HTML → PDF (WeasyPrint) → S3 presigned URL.
 """
 
-import logging
 import tempfile
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, Field
 
 from config import AppSettings, get_settings
-from container import get_editor_ai_service, get_pdf_renderer, get_storage_service
+from container import get_pdf_renderer, get_storage_service
 from core.domain.cv_resume_schema import CVResumeSchema
-from core.ports.editor_ai_port import IEditorAIService
 from core.ports.pdf_render_port import IPDFRenderService
 from domain.ports import IStorageService
 from presentation.dependencies.auth import get_current_user_id
 from presentation.dependencies.rate_limiter import check_editor_rate_limit
 
-logger = logging.getLogger(__name__)
-
 router = APIRouter(prefix="/api/v1/editor", tags=["Editor"])
-
-
-# ─── Refinements ─────────────────────────────────────────────────────────────
-
-
-class RefinementRequest(BaseModel):
-    selected_text: str = Field(..., description="Plain-text snippet to refine (e.g. a bullet point or summary sentence).")
-    prompt: str = Field(..., description="User instruction (e.g. 'Make it STAR format', 'Add metrics').")
-
-
-class RefinementResponse(BaseModel):
-    new_text: str = Field(..., description="Refined plain-text snippet.")
-
-
-@router.post(
-    "/refinements",
-    response_model=RefinementResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Refine a CV text snippet with AI",
-)
-async def create_refinement(
-    payload: RefinementRequest,
-    user_id: str = Depends(get_current_user_id),
-    _rate_check: None = Depends(check_editor_rate_limit),
-    editor_ai: IEditorAIService = Depends(get_editor_ai_service),
-) -> RefinementResponse:
-    """Rewrite the selected text snippet according to the user prompt."""
-    try:
-        new_text = await editor_ai.refine(
-            selected_text=payload.selected_text,
-            prompt=payload.prompt,
-        )
-        return RefinementResponse(new_text=new_text)
-    except Exception as exc:
-        logger.warning("Refinement failed: %s", exc, exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="AI refinement failed. Please try again.",
-        ) from exc
 
 
 # ─── Renders ─────────────────────────────────────────────────────────────────

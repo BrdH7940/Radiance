@@ -10,9 +10,10 @@ const STEPS = [
 
 interface NavBarProps {
     activeStep?: number
+    onStepClick?: (step: number) => void
 }
 
-export function NavBar({ activeStep = 1 }: NavBarProps) {
+export function NavBar({ activeStep = 1, onStepClick }: NavBarProps) {
     return (
         <nav className="sticky top-0 z-50 h-20 flex items-center border-b-4 border-black bg-[#FBFBF9]">
             <div className="w-full max-w-screen-xl mx-auto px-8 flex items-center justify-between">
@@ -37,15 +38,18 @@ export function NavBar({ activeStep = 1 }: NavBarProps) {
                                 key={step.number}
                                 className="flex items-center gap-1.5"
                             >
-                                <div
+                                <button
+                                    type="button"
+                                    onClick={() => onStepClick?.(step.number)}
                                     className={`
                     flex items-center gap-2 px-3 py-1.5 rounded-none transition-all duration-500
+                    hover:translate-x-[2px] hover:translate-y-[2px]
                     ${
                         isActive
                             ? 'bg-[#432DD7] border-4 border-black text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
                             : isDone
-                              ? 'bg-[#FBFBF9] border-4 border-black text-[#1C293C]'
-                              : 'bg-[#FBFBF9] border-4 border-black text-[#1C293C]'
+                              ? 'bg-[#FBFBF9] border-4 border-black text-[#1C293C] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
+                              : 'bg-[#FBFBF9] border-4 border-black text-[#1C293C] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
                     }
                   `}
                                 >
@@ -66,10 +70,10 @@ export function NavBar({ activeStep = 1 }: NavBarProps) {
                                     <span className="text-xs font-medium tracking-widest uppercase hidden sm:block">
                                         {step.label}
                                     </span>
-                                </div>
+                                </button>
 
                                 {i < STEPS.length - 1 && (
-                                    <div className="w-6 h-px bg-white/10" />
+                                    <div className="w-6 h-1 bg-black" />
                                 )}
                             </div>
                         )

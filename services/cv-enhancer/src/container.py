@@ -14,7 +14,6 @@ AppSettings
   ├─ GeminiLLMAdapter              (implements ILLMService)
   ├─ DynamoJobRepository           (implements IJobRepository)
   ├─ WeasyPrintPDFAdapter          (implements IPDFRenderService)
-  ├─ EditorAIGeminiAdapter         (implements IEditorAIService)
   ├─ SupabaseProjectRepository     (implements IProjectRepository)
   ├─ SupabaseHistoryRepository     (implements IHistoryRepository)
   └─ AnalyzeCVUseCase              ← consumes the above
@@ -25,7 +24,6 @@ from functools import lru_cache
 from pathlib import Path
 
 from config import AppSettings, get_settings
-from core.ports.editor_ai_port import IEditorAIService
 from core.ports.history_repository_port import IHistoryRepository
 from core.ports.job_repository_port import IJobRepository
 from core.ports.llm_port import ILLMService
@@ -34,7 +32,6 @@ from core.ports.project_repository_port import IProjectRepository
 from core.use_cases.analyze_cv_use_case import AnalyzeCVUseCase
 from domain.ports import IStorageService
 from infrastructure.adapters.dynamo_job_repository import DynamoJobRepository
-from infrastructure.adapters.editor_ai_gemini_adapter import EditorAIGeminiAdapter
 from infrastructure.adapters.gemini_llm_adapter import GeminiLLMAdapter
 from infrastructure.adapters.supabase_client import get_supabase_client
 from infrastructure.adapters.supabase_history_repository import SupabaseHistoryRepository
@@ -120,19 +117,6 @@ def get_pdf_renderer() -> IPDFRenderService:
     """Singleton WeasyPrintPDFAdapter backed by Jinja2 HTML template."""
     logger.info("Initialising WeasyPrintPDFAdapter (templates: '%s')…", _TEMPLATES_DIR)
     return WeasyPrintPDFAdapter(template_dir=_TEMPLATES_DIR)
-
-
-@lru_cache(maxsize=1)
-def get_editor_ai_service() -> IEditorAIService:
-    """Singleton EditorAIGeminiAdapter for plain-text CV field refinement."""
-    settings: AppSettings = get_settings()
-    logger.info(
-        "Initialising EditorAIGeminiAdapter (model: '%s')…", settings.gemini_model
-    )
-    return EditorAIGeminiAdapter(
-        api_key=settings.google_api_key,
-        model=settings.gemini_model,
-    )
 
 
 @lru_cache(maxsize=1)

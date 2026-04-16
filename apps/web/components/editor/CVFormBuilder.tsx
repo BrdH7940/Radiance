@@ -3,20 +3,13 @@
 import {
     useState,
     useCallback,
-    useRef,
     type ChangeEvent,
-    type KeyboardEvent,
 } from 'react'
 import {
     ChevronDown,
     ChevronRight,
     Plus,
     Trash2,
-    Sparkles,
-    Loader2,
-    Wand2,
-    X,
-    CornerDownLeft,
     User,
     Briefcase,
     GraduationCap,
@@ -27,151 +20,12 @@ import {
     Award,
 } from 'lucide-react'
 import type { CVResumeSchema, CVExperience, CVEducation, CVProject, CVSkillGroup, CVAwardsCertification, CVLink } from '@/services/api'
-import { aiRefineText } from '@/services/api'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface CVFormBuilderProps {
     cvData: CVResumeSchema
     onChange: (updated: CVResumeSchema) => void
-}
-
-type AITarget = { value: string; onApply: (v: string) => void }
-
-const QUICK_PROMPTS = [
-    'Make it STAR format',
-    'Add metrics & numbers',
-    'Stronger action verbs',
-    'Make it more concise',
-]
-
-// ─── AI Rewrite Popover ───────────────────────────────────────────────────────
-
-function AIPopover({
-    target,
-    onClose,
-}: {
-    target: AITarget
-    onClose: () => void
-}) {
-    const [prompt, setPrompt] = useState('')
-    const [isLoading, setIsLoading] = useState(false)
-    const [error, setError] = useState<string | null>(null)
-    const inputRef = useRef<HTMLInputElement>(null)
-
-    const handleSubmit = useCallback(async () => {
-        const trimmed = prompt.trim()
-        if (!trimmed || isLoading) return
-        setError(null)
-        setIsLoading(true)
-        try {
-            const { newText } = await aiRefineText(target.value, trimmed)
-            target.onApply(newText)
-            onClose()
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'AI request failed.')
-        } finally {
-            setIsLoading(false)
-        }
-    }, [prompt, isLoading, target, onClose])
-
-    const handleKey = useCallback(
-        (e: KeyboardEvent<HTMLInputElement>) => {
-            if (e.key === 'Enter') { e.preventDefault(); handleSubmit() }
-            if (e.key === 'Escape') onClose()
-        },
-        [handleSubmit, onClose]
-    )
-
-    return (
-        <div className="mt-2 rounded-2xl border border-violet-500/20 bg-[#0a0f18]/95 backdrop-blur-xl shadow-2xl shadow-black/60 overflow-hidden">
-            {/* Header */}
-            <div className="flex items-center gap-2 px-3 py-2 border-b border-white/5">
-                <Sparkles className="w-3 h-3 text-violet-400" strokeWidth={2} />
-                <span className="text-[10px] font-bold text-violet-400 tracking-wider">RADIANCE AI</span>
-                <div className="flex-1" />
-                <span className="text-[10px] text-slate-600 font-mono truncate max-w-[160px]">
-                    &ldquo;{target.value.slice(0, 40)}{target.value.length > 40 ? '…' : ''}&rdquo;
-                </span>
-                <button onClick={onClose} className="w-5 h-5 flex items-center justify-center rounded-full text-slate-600 hover:text-slate-300 hover:bg-white/5 transition-colors">
-                    <X className="w-3 h-3" />
-                </button>
-            </div>
-
-            {/* Quick prompts */}
-            <div className="flex gap-1.5 px-3 pt-2 flex-wrap">
-                {QUICK_PROMPTS.map((s) => (
-                    <button
-                        key={s}
-                        onClick={() => { setPrompt(s); inputRef.current?.focus() }}
-                        className="px-2 py-0.5 rounded-full text-[10px] text-slate-400 border border-white/8 hover:border-violet-500/40 hover:text-violet-300 hover:bg-violet-500/5 transition-all duration-200"
-                    >
-                        {s}
-                    </button>
-                ))}
-            </div>
-
-            {/* Input */}
-            <div className="flex items-center gap-2 p-2.5">
-                <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-2xl border border-white/10 bg-white/[0.03] focus-within:border-violet-500/40 transition-all duration-300">
-                    <Wand2 className="w-3.5 h-3.5 text-slate-600 shrink-0" strokeWidth={1.5} />
-                    <input
-                        ref={inputRef}
-                        autoFocus
-                        type="text"
-                        value={prompt}
-                        onChange={(e) => setPrompt(e.target.value)}
-                        onKeyDown={handleKey}
-                        placeholder="Ask AI to rewrite this…"
-                        disabled={isLoading}
-                        className="flex-1 bg-transparent text-slate-200 text-xs placeholder:text-slate-700 outline-none min-w-0"
-                    />
-                </div>
-                <button
-                    onClick={handleSubmit}
-                    disabled={!prompt.trim() || isLoading}
-                    className={`flex items-center gap-1 px-3 py-2 rounded-2xl text-xs font-semibold transition-all duration-300 shrink-0 ${
-                        prompt.trim() && !isLoading
-                            ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg shadow-violet-900/30 hover:brightness-110'
-                            : 'bg-white/5 text-slate-600 cursor-not-allowed'
-                    }`}
-                >
-                    {isLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <><CornerDownLeft className="w-3 h-3" /> Go</>}
-                </button>
-            </div>
-            {(isLoading || error) && (
-                <div className={`px-3 pb-2 text-[10px] ${error ? 'text-red-400' : 'text-slate-500'}`}>
-                    {isLoading ? <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />Rewriting…</span> : error}
-                </div>
-            )}
-        </div>
-    )
-}
-
-// ─── AI Field Button ──────────────────────────────────────────────────────────
-
-function AIBtn({ value, onApply }: { value: string; onApply: (v: string) => void }) {
-    const [open, setOpen] = useState(false)
-
-    if (open) {
-        return (
-            <AIPopover
-                target={{ value, onApply }}
-                onClose={() => setOpen(false)}
-            />
-        )
-    }
-
-    return (
-        <button
-            type="button"
-            onClick={() => setOpen(true)}
-            title="AI Rewrite"
-            className="shrink-0 w-6 h-6 flex items-center justify-center rounded-full border border-violet-500/20 bg-violet-500/5 text-violet-400 hover:bg-violet-500/15 hover:border-violet-500/40 transition-all duration-200"
-        >
-            <Sparkles className="w-3 h-3" />
-        </button>
-    )
 }
 
 // ─── Shared UI primitives ─────────────────────────────────────────────────────
@@ -192,15 +46,15 @@ function SectionHeader({
     addLabel?: string
 }) {
     return (
-        <div className="flex items-center gap-2 px-3 py-2.5 border-b border-white/5">
+        <div className="flex items-center gap-2 px-3 py-2.5 border-b-4 border-black bg-[#FBFBF9]">
             <button
                 type="button"
                 onClick={onToggle}
                 className="flex items-center gap-2 flex-1 text-left"
             >
-                <span className="text-slate-500">{icon}</span>
-                <span className="text-sm font-semibold text-slate-200">{title}</span>
-                <span className="text-slate-600 ml-auto">
+                <span className="text-[#1C293C]">{icon}</span>
+                <span className="text-sm font-semibold text-[#1C293C]">{title}</span>
+                <span className="text-[#4B5563] ml-auto">
                     {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                 </span>
             </button>
@@ -208,7 +62,7 @@ function SectionHeader({
                 <button
                     type="button"
                     onClick={onAdd}
-                    className="flex items-center gap-1 px-2 py-1 rounded-xl text-[11px] font-medium text-indigo-300 border border-indigo-500/20 bg-indigo-500/5 hover:bg-indigo-500/15 transition-all duration-200"
+                    className="flex items-center gap-1 px-2 py-1 rounded-none text-[11px] font-medium text-[#1C293C] border-4 border-black bg-[#FDC800] transition-all duration-200 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[3px] hover:translate-y-[3px]"
                 >
                     <Plus className="w-3 h-3" />
                     {addLabel}
@@ -221,7 +75,7 @@ function SectionHeader({
 function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
     return (
         <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">{label}</label>
+            <label className="text-[10px] font-medium text-[#4B5563] uppercase tracking-wide">{label}</label>
             {children}
         </div>
     )
@@ -231,12 +85,10 @@ function Input({
     value,
     onChange,
     placeholder,
-    showAI = false,
 }: {
     value: string
     onChange: (v: string) => void
     placeholder?: string
-    showAI?: boolean
 }) {
     return (
         <div className="flex flex-col gap-1">
@@ -246,9 +98,8 @@ function Input({
                     value={value}
                     onChange={(e: ChangeEvent<HTMLInputElement>) => onChange(e.target.value)}
                     placeholder={placeholder}
-                    className="flex-1 px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/8 text-slate-200 text-sm placeholder:text-slate-700 outline-none focus:border-indigo-500/40 transition-colors"
+                    className="flex-1 px-3 py-1.5 rounded-none bg-[#FBFBF9] border-4 border-black text-[#1C293C] text-sm placeholder:text-[#4B5563] outline-none focus:bg-[#FDC800] transition-colors"
                 />
-                {showAI && value && <AIBtn value={value} onApply={onChange} />}
             </div>
         </div>
     )
@@ -259,13 +110,11 @@ function Textarea({
     onChange,
     placeholder,
     rows = 3,
-    showAI = false,
 }: {
     value: string
     onChange: (v: string) => void
     placeholder?: string
     rows?: number
-    showAI?: boolean
 }) {
     return (
         <div className="flex flex-col gap-1">
@@ -275,13 +124,8 @@ function Textarea({
                     onChange={(e: ChangeEvent<HTMLTextAreaElement>) => onChange(e.target.value)}
                     placeholder={placeholder}
                     rows={rows}
-                    className="flex-1 px-3 py-2 rounded-xl bg-white/[0.04] border border-white/8 text-slate-200 text-sm placeholder:text-slate-700 outline-none focus:border-indigo-500/40 transition-colors resize-none leading-relaxed"
+                    className="flex-1 px-3 py-2 rounded-none bg-[#FBFBF9] border-4 border-black text-[#1C293C] text-sm placeholder:text-[#4B5563] outline-none focus:bg-[#FDC800] transition-colors resize-none leading-relaxed"
                 />
-                {showAI && value && (
-                    <div className="mt-1">
-                        <AIBtn value={value} onApply={onChange} />
-                    </div>
-                )}
             </div>
         </div>
     )
@@ -413,7 +257,7 @@ export function CVFormBuilder({ cvData, onChange }: CVFormBuilderProps) {
     // ─── Render ───────────────────────────────────────────────────────────────
 
     return (
-        <div className="h-full overflow-y-auto text-slate-200 flex flex-col divide-y divide-white/5">
+        <div className="h-full overflow-y-auto text-[#1C293C] flex flex-col divide-y-4 divide-black bg-[#FBFBF9]">
 
             {/* ── Personal Info ─────────────────────────────────────────────── */}
             <div>
@@ -444,7 +288,7 @@ export function CVFormBuilder({ cvData, onChange }: CVFormBuilderProps) {
 
                         {cvData.personal_info.links.length > 0 && (
                             <div className="flex flex-col gap-2">
-                                <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide flex items-center gap-1">
+                                <span className="text-[10px] font-medium text-[#4B5563] uppercase tracking-wide flex items-center gap-1">
                                     <Link className="w-3 h-3" /> Links
                                 </span>
                                 {cvData.personal_info.links.map((l, i) => (
@@ -454,19 +298,19 @@ export function CVFormBuilder({ cvData, onChange }: CVFormBuilderProps) {
                                             value={l.label}
                                             onChange={(e) => updateLink(i, 'label', e.target.value)}
                                             placeholder="LinkedIn"
-                                            className="w-24 px-2 py-1.5 rounded-xl bg-white/[0.04] border border-white/8 text-slate-200 text-xs placeholder:text-slate-700 outline-none focus:border-indigo-500/40 transition-colors"
+                                            className="w-24 px-2 py-1.5 rounded-none bg-[#FBFBF9] border-4 border-black text-[#1C293C] text-xs placeholder:text-[#4B5563] outline-none focus:bg-[#FDC800] transition-colors"
                                         />
                                         <input
                                             type="text"
                                             value={l.url}
                                             onChange={(e) => updateLink(i, 'url', e.target.value)}
                                             placeholder="https://linkedin.com/in/…"
-                                            className="flex-1 px-2 py-1.5 rounded-xl bg-white/[0.04] border border-white/8 text-slate-200 text-xs placeholder:text-slate-700 outline-none focus:border-indigo-500/40 transition-colors"
+                                            className="flex-1 px-2 py-1.5 rounded-none bg-[#FBFBF9] border-4 border-black text-[#1C293C] text-xs placeholder:text-[#4B5563] outline-none focus:bg-[#FDC800] transition-colors"
                                         />
                                         <button
                                             type="button"
                                             onClick={() => removeLink(i)}
-                                            className="w-6 h-6 flex items-center justify-center rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-all duration-200"
+                                            className="w-6 h-6 flex items-center justify-center rounded-none border-4 border-black text-[#1C293C] hover:text-[#DC2626] hover:bg-[#DC2626]/10 transition-all duration-200"
                                         >
                                             <Trash2 className="w-3.5 h-3.5" />
                                         </button>
@@ -493,7 +337,6 @@ export function CVFormBuilder({ cvData, onChange }: CVFormBuilderProps) {
                             onChange={updateSummary}
                             placeholder="3-sentence executive summary tailored to the role…"
                             rows={4}
-                            showAI
                         />
                     </div>
                 )}
@@ -510,18 +353,18 @@ export function CVFormBuilder({ cvData, onChange }: CVFormBuilderProps) {
                     addLabel="Add role"
                 />
                 {(expanded.experiences ?? true) && (
-                    <div className="divide-y divide-white/[0.04]">
+                    <div className="divide-y-4 divide-black/10">
                         {cvData.experiences.map((exp, ei) => (
                             <div key={ei} className="p-3 flex flex-col gap-3">
                                 {/* Entry header */}
                                 <div className="flex items-center justify-between">
-                                    <span className="text-xs font-semibold text-slate-400">
+                                    <span className="text-xs font-semibold text-[#4B5563]">
                                         {exp.role || exp.company || `Role ${ei + 1}`}
                                     </span>
                                     <button
                                         type="button"
                                         onClick={() => removeExp(ei)}
-                                        className="w-6 h-6 flex items-center justify-center rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-all duration-200"
+                                        className="w-6 h-6 flex items-center justify-center rounded-none border-4 border-black text-[#1C293C] hover:text-[#DC2626] hover:bg-[#DC2626]/10 transition-all duration-200"
                                     >
                                         <Trash2 className="w-3.5 h-3.5" />
                                     </button>
@@ -541,23 +384,22 @@ export function CVFormBuilder({ cvData, onChange }: CVFormBuilderProps) {
 
                                 {/* Bullets */}
                                 <div className="flex flex-col gap-1.5">
-                                    <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Bullets</span>
+                                    <span className="text-[10px] font-medium text-[#4B5563] uppercase tracking-wide">Bullets</span>
                                     {exp.bullets.map((b, bi) => (
                                         <div key={bi} className="flex items-start gap-1.5">
-                                            <span className="mt-2.5 w-1 h-1 rounded-full bg-slate-600 shrink-0" />
+                                            <span className="mt-2.5 w-1 h-1 rounded-full bg-black shrink-0" />
                                             <textarea
                                                 value={b}
                                                 onChange={(e) => updateExpBullet(ei, bi, e.target.value)}
                                                 placeholder="Action verb + quantified result…"
                                                 rows={2}
-                                                className="flex-1 px-3 py-2 rounded-xl bg-white/[0.04] border border-white/8 text-slate-200 text-xs placeholder:text-slate-700 outline-none focus:border-indigo-500/40 transition-colors resize-none leading-relaxed"
+                                                className="flex-1 px-3 py-2 rounded-none bg-[#FBFBF9] border-4 border-black text-[#1C293C] text-xs placeholder:text-[#4B5563] outline-none focus:bg-[#FDC800] transition-colors resize-none leading-relaxed"
                                             />
                                             <div className="flex flex-col gap-1 mt-1">
-                                                {b && <AIBtn value={b} onApply={(v) => updateExpBullet(ei, bi, v)} />}
                                                 <button
                                                     type="button"
                                                     onClick={() => removeExpBullet(ei, bi)}
-                                                    className="w-6 h-6 flex items-center justify-center rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-all duration-200"
+                                                    className="w-6 h-6 flex items-center justify-center rounded-none border-4 border-black text-[#1C293C] hover:text-[#DC2626] hover:bg-[#DC2626]/10 transition-all duration-200"
                                                 >
                                                     <Trash2 className="w-3 h-3" />
                                                 </button>
@@ -567,7 +409,7 @@ export function CVFormBuilder({ cvData, onChange }: CVFormBuilderProps) {
                                     <button
                                         type="button"
                                         onClick={() => addExpBullet(ei)}
-                                        className="flex items-center gap-1 text-[11px] text-indigo-400 hover:text-indigo-300 transition-colors mt-1 self-start"
+                                        className="flex items-center gap-1 text-[11px] text-[#432DD7] hover:text-[#432DD7] transition-colors mt-1 self-start"
                                     >
                                         <Plus className="w-3 h-3" /> Add bullet
                                     </button>
@@ -589,17 +431,17 @@ export function CVFormBuilder({ cvData, onChange }: CVFormBuilderProps) {
                     addLabel="Add entry"
                 />
                 {(expanded.education ?? true) && (
-                    <div className="divide-y divide-white/[0.04]">
+                    <div className="divide-y-4 divide-black/10">
                         {cvData.education.map((edu, ei) => (
                             <div key={ei} className="p-3 flex flex-col gap-3">
                                 <div className="flex items-center justify-between">
-                                    <span className="text-xs font-semibold text-slate-400">
+                                    <span className="text-xs font-semibold text-[#4B5563]">
                                         {edu.degree || edu.institution || `Entry ${ei + 1}`}
                                     </span>
                                     <button
                                         type="button"
                                         onClick={() => removeEdu(ei)}
-                                        className="w-6 h-6 flex items-center justify-center rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-all duration-200"
+                                        className="w-6 h-6 flex items-center justify-center rounded-none border-4 border-black text-[#1C293C] hover:text-[#DC2626] hover:bg-[#DC2626]/10 transition-all duration-200"
                                     >
                                         <Trash2 className="w-3.5 h-3.5" />
                                     </button>
@@ -631,21 +473,21 @@ export function CVFormBuilder({ cvData, onChange }: CVFormBuilderProps) {
 
                                 {edu.honors.length > 0 && (
                                     <div className="flex flex-col gap-1.5">
-                                        <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Honors</span>
+                                        <span className="text-[10px] font-medium text-[#4B5563] uppercase tracking-wide">Honors</span>
                                         {edu.honors.map((h, bi) => (
                                             <div key={bi} className="flex items-center gap-1.5">
-                                                <span className="w-1 h-1 rounded-full bg-slate-600 shrink-0" />
+                                                <span className="w-1 h-1 rounded-full bg-black shrink-0" />
                                                 <input
                                                     type="text"
                                                     value={h}
                                                     onChange={(e) => updateEduHonor(ei, bi, e.target.value)}
                                                     placeholder="Dean's List, Valedictorian…"
-                                                    className="flex-1 px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/8 text-slate-200 text-xs placeholder:text-slate-700 outline-none focus:border-indigo-500/40 transition-colors"
+                                                    className="flex-1 px-3 py-1.5 rounded-none bg-[#FBFBF9] border-4 border-black text-[#1C293C] text-xs placeholder:text-[#4B5563] outline-none focus:bg-[#FDC800] transition-colors"
                                                 />
                                                 <button
                                                     type="button"
                                                     onClick={() => removeEduHonor(ei, bi)}
-                                                    className="w-6 h-6 flex items-center justify-center rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-all duration-200"
+                                                    className="w-6 h-6 flex items-center justify-center rounded-none border-4 border-black text-[#1C293C] hover:text-[#DC2626] hover:bg-[#DC2626]/10 transition-all duration-200"
                                                 >
                                                     <Trash2 className="w-3 h-3" />
                                                 </button>
@@ -656,7 +498,7 @@ export function CVFormBuilder({ cvData, onChange }: CVFormBuilderProps) {
                                 <button
                                     type="button"
                                     onClick={() => addEduHonor(ei)}
-                                    className="flex items-center gap-1 text-[11px] text-indigo-400 hover:text-indigo-300 transition-colors self-start"
+                                    className="flex items-center gap-1 text-[11px] text-[#432DD7] hover:text-[#432DD7] transition-colors self-start"
                                 >
                                     <Plus className="w-3 h-3" /> Add honor
                                 </button>
@@ -677,17 +519,17 @@ export function CVFormBuilder({ cvData, onChange }: CVFormBuilderProps) {
                     addLabel="Add project"
                 />
                 {(expanded.projects ?? true) && (
-                    <div className="divide-y divide-white/[0.04]">
+                    <div className="divide-y-4 divide-black/10">
                         {cvData.projects.map((proj, pi) => (
                             <div key={pi} className="p-3 flex flex-col gap-3">
                                 <div className="flex items-center justify-between">
-                                    <span className="text-xs font-semibold text-slate-400">
+                                    <span className="text-xs font-semibold text-[#4B5563]">
                                         {proj.name || `Project ${pi + 1}`}
                                     </span>
                                     <button
                                         type="button"
                                         onClick={() => removeProj(pi)}
-                                        className="w-6 h-6 flex items-center justify-center rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-all duration-200"
+                                        className="w-6 h-6 flex items-center justify-center rounded-none border-4 border-black text-[#1C293C] hover:text-[#DC2626] hover:bg-[#DC2626]/10 transition-all duration-200"
                                     >
                                         <Trash2 className="w-3.5 h-3.5" />
                                     </button>
@@ -721,28 +563,27 @@ export function CVFormBuilder({ cvData, onChange }: CVFormBuilderProps) {
                                             })
                                         }
                                         placeholder="Python, FastAPI, PostgreSQL, Docker"
-                                        className="px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/8 text-slate-200 text-xs placeholder:text-slate-700 outline-none focus:border-indigo-500/40 transition-colors"
+                                        className="px-3 py-1.5 rounded-none bg-[#FBFBF9] border-4 border-black text-[#1C293C] text-xs placeholder:text-[#4B5563] outline-none focus:bg-[#FDC800] transition-colors"
                                     />
                                 </FieldRow>
 
                                 <div className="flex flex-col gap-1.5">
-                                    <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Description</span>
+                                    <span className="text-[10px] font-medium text-[#4B5563] uppercase tracking-wide">Description</span>
                                     {proj.description.map((d, bi) => (
                                         <div key={bi} className="flex items-start gap-1.5">
-                                            <span className="mt-2.5 w-1 h-1 rounded-full bg-slate-600 shrink-0" />
+                                            <span className="mt-2.5 w-1 h-1 rounded-full bg-black shrink-0" />
                                             <textarea
                                                 value={d}
                                                 onChange={(e) => updateProjDesc(pi, bi, e.target.value)}
                                                 placeholder="Action verb + problem solved + measurable result…"
                                                 rows={2}
-                                                className="flex-1 px-3 py-2 rounded-xl bg-white/[0.04] border border-white/8 text-slate-200 text-xs placeholder:text-slate-700 outline-none focus:border-indigo-500/40 transition-colors resize-none leading-relaxed"
+                                                className="flex-1 px-3 py-2 rounded-none bg-[#FBFBF9] border-4 border-black text-[#1C293C] text-xs placeholder:text-[#4B5563] outline-none focus:bg-[#FDC800] transition-colors resize-none leading-relaxed"
                                             />
                                             <div className="flex flex-col gap-1 mt-1">
-                                                {d && <AIBtn value={d} onApply={(v) => updateProjDesc(pi, bi, v)} />}
                                                 <button
                                                     type="button"
                                                     onClick={() => removeProjDesc(pi, bi)}
-                                                    className="w-6 h-6 flex items-center justify-center rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-all duration-200"
+                                                    className="w-6 h-6 flex items-center justify-center rounded-none border-4 border-black text-[#1C293C] hover:text-[#DC2626] hover:bg-[#DC2626]/10 transition-all duration-200"
                                                 >
                                                     <Trash2 className="w-3 h-3" />
                                                 </button>
@@ -752,7 +593,7 @@ export function CVFormBuilder({ cvData, onChange }: CVFormBuilderProps) {
                                     <button
                                         type="button"
                                         onClick={() => addProjDesc(pi)}
-                                        className="flex items-center gap-1 text-[11px] text-indigo-400 hover:text-indigo-300 transition-colors mt-1 self-start"
+                                        className="flex items-center gap-1 text-[11px] text-[#432DD7] hover:text-[#432DD7] transition-colors mt-1 self-start"
                                     >
                                         <Plus className="w-3 h-3" /> Add bullet
                                     </button>
@@ -776,19 +617,19 @@ export function CVFormBuilder({ cvData, onChange }: CVFormBuilderProps) {
                 {(expanded.skills ?? true) && (
                     <div className="p-3 flex flex-col gap-3">
                         {cvData.skill_groups.map((sg, i) => (
-                            <div key={i} className="flex flex-col gap-2 p-3 rounded-2xl bg-white/[0.02] border border-white/5">
+                            <div key={i} className="flex flex-col gap-2 p-3 rounded-none bg-[#FBFBF9] border-4 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
                                 <div className="flex items-center gap-2">
                                     <input
                                         type="text"
                                         value={sg.category}
                                         onChange={(e) => updateSkillGroup(i, { category: e.target.value })}
                                         placeholder="Category (e.g. Programming Languages)"
-                                        className="flex-1 px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/8 text-slate-200 text-xs font-semibold placeholder:text-slate-700 outline-none focus:border-indigo-500/40 transition-colors"
+                                        className="flex-1 px-3 py-1.5 rounded-none bg-[#FBFBF9] border-4 border-black text-[#1C293C] text-xs font-semibold placeholder:text-[#4B5563] outline-none focus:bg-[#FDC800] transition-colors"
                                     />
                                     <button
                                         type="button"
                                         onClick={() => removeSkillGroup(i)}
-                                        className="w-6 h-6 flex items-center justify-center rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-all duration-200"
+                                        className="w-6 h-6 flex items-center justify-center rounded-none border-4 border-black text-[#1C293C] hover:text-[#DC2626] hover:bg-[#DC2626]/10 transition-all duration-200"
                                     >
                                         <Trash2 className="w-3.5 h-3.5" />
                                     </button>
@@ -802,7 +643,7 @@ export function CVFormBuilder({ cvData, onChange }: CVFormBuilderProps) {
                                         })
                                     }
                                     placeholder="Python, Go, TypeScript (comma-separated)"
-                                    className="px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/8 text-slate-200 text-xs placeholder:text-slate-700 outline-none focus:border-indigo-500/40 transition-colors"
+                                    className="px-3 py-1.5 rounded-none bg-[#FBFBF9] border-4 border-black text-[#1C293C] text-xs placeholder:text-[#4B5563] outline-none focus:bg-[#FDC800] transition-colors"
                                 />
                             </div>
                         ))}
@@ -823,20 +664,19 @@ export function CVFormBuilder({ cvData, onChange }: CVFormBuilderProps) {
                 {(expanded.awards ?? true) && (
                     <div className="p-3 flex flex-col gap-2">
                         {cvData.awards_certifications.map((aw, i) => (
-                            <div key={i} className="flex flex-col gap-2 p-3 rounded-2xl bg-white/[0.02] border border-white/5">
+                            <div key={i} className="flex flex-col gap-2 p-3 rounded-none bg-[#FBFBF9] border-4 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
                                 <div className="flex items-center gap-2">
                                     <input
                                         type="text"
                                         value={aw.title}
                                         onChange={(e) => updateAward(i, { title: e.target.value })}
                                         placeholder="AWS Certified Solutions Architect – Associate"
-                                        className="flex-1 px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/8 text-slate-200 text-xs placeholder:text-slate-700 outline-none focus:border-indigo-500/40 transition-colors"
+                                        className="flex-1 px-3 py-1.5 rounded-none bg-[#FBFBF9] border-4 border-black text-[#1C293C] text-xs placeholder:text-[#4B5563] outline-none focus:bg-[#FDC800] transition-colors"
                                     />
-                                    {aw.title && <AIBtn value={aw.title} onApply={(v) => updateAward(i, { title: v })} />}
                                     <button
                                         type="button"
                                         onClick={() => removeAward(i)}
-                                        className="w-6 h-6 flex items-center justify-center rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-all duration-200"
+                                        className="w-6 h-6 flex items-center justify-center rounded-none border-4 border-black text-[#1C293C] hover:text-[#DC2626] hover:bg-[#DC2626]/10 transition-all duration-200"
                                     >
                                         <Trash2 className="w-3.5 h-3.5" />
                                     </button>
@@ -846,12 +686,12 @@ export function CVFormBuilder({ cvData, onChange }: CVFormBuilderProps) {
                                     value={aw.link ?? ''}
                                     onChange={(e) => updateAward(i, { link: e.target.value || null })}
                                     placeholder="https://credly.com/badges/… (optional verify link)"
-                                    className="px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/8 text-slate-200 text-xs placeholder:text-slate-700 outline-none focus:border-indigo-500/40 transition-colors"
+                                    className="px-3 py-1.5 rounded-none bg-[#FBFBF9] border-4 border-black text-[#1C293C] text-xs placeholder:text-[#4B5563] outline-none focus:bg-[#FDC800] transition-colors"
                                 />
                             </div>
                         ))}
                         {cvData.awards_certifications.length === 0 && (
-                            <p className="text-[11px] text-slate-600 text-center py-2">
+                            <p className="text-[11px] text-[#4B5563] text-center py-2">
                                 No awards or certifications yet. Click &ldquo;Add award&rdquo; to add one.
                             </p>
                         )}

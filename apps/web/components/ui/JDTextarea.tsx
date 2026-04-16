@@ -19,7 +19,11 @@ Requirements:
 • Strong communication and leadership skills
 • AWS or GCP cloud experience`
 
-export function JDTextarea() {
+interface JDTextareaProps {
+    readOnly?: boolean
+}
+
+export function JDTextarea({ readOnly = false }: JDTextareaProps) {
     const { jdText, setJdText } = useCVStore()
 
     const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -158,6 +162,7 @@ export function JDTextarea() {
                     onPaste={handlePaste}
                     onChange={(e) => setJdText(e.target.value)}
                     placeholder={PLACEHOLDER}
+                    readOnly={readOnly}
                     className="
             flex-1 w-full px-5 py-4 bg-transparent text-[#1C293C] text-base
             leading-relaxed resize-none outline-none
@@ -186,7 +191,7 @@ export function JDTextarea() {
 
                     {wordCount > 0 && wordCount < 50 && (
                         <span className="text-sm text-amber-500/80">
-                            More detail = Better analysis
+                            {readOnly ? 'Review mode' : 'More detail = Better analysis'}
                         </span>
                     )}
 

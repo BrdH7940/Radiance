@@ -1,10 +1,14 @@
 'use client'
 
 import { useCallback, useState } from 'react'
-import { Upload, X, CheckCircle } from 'lucide-react'
+import { Upload, X, CheckCircle, EyeOff } from 'lucide-react'
 import { useCVStore } from '@/store/useCVStore'
 
-export function CVDropzone() {
+interface CVDropzoneProps {
+    reviewMode?: boolean
+}
+
+export function CVDropzone({ reviewMode = false }: CVDropzoneProps) {
     const { cvFile, setCvFile } = useCVStore()
     const [isDragging, setIsDragging] = useState(false)
 
@@ -75,18 +79,20 @@ export function CVDropzone() {
             {/* Drop zone */}
             <label
                 htmlFor="cv-file-input"
-                className="cursor-pointer flex-1 block group"
+                className={`flex-1 block group ${reviewMode ? 'cursor-default' : 'cursor-pointer'}`}
             >
                 <div
-                    onDrop={handleDrop}
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
+                    onDrop={reviewMode ? undefined : handleDrop}
+                    onDragOver={reviewMode ? undefined : handleDragOver}
+                    onDragLeave={reviewMode ? undefined : handleDragLeave}
                     className={`
             relative flex flex-col items-center justify-center
             rounded-none border-4 border-dashed h-full min-h-[320px]
             transition-all duration-700
             ${
-                hasFile
+                reviewMode
+                    ? 'border-black bg-[#FBFBF9]'
+                    : hasFile
                     ? 'border-black bg-[#FDC800]'
                     : isDragging
                       ? 'border-black bg-[#FBFBF9] scale-[1.01]'
@@ -94,7 +100,21 @@ export function CVDropzone() {
             }
           `}
                 >
-                    {hasFile ? (
+                    {reviewMode ? (
+                        <div className="flex flex-col items-center gap-4 p-8 text-center animate-in fade-in duration-500">
+                            <div className="w-16 h-16 rounded-none bg-[#FBFBF9] border-4 border-black flex items-center justify-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                                <EyeOff className="w-8 h-8 text-[#1C293C]" strokeWidth={1.8} />
+                            </div>
+                            <div>
+                                <p className="text-[#1C293C] font-bold text-base mb-0.5">
+                                    PDF hidden in review mode
+                                </p>
+                                <p className="text-[#4B5563] text-sm">
+                                    You can review the job description here, but the uploaded PDF is intentionally hidden.
+                                </p>
+                            </div>
+                        </div>
+                    ) : hasFile ? (
                         /* File selected state */
                         <div className="flex flex-col items-center gap-4 p-8 text-center animate-in fade-in duration-500">
                             <div className="w-16 h-16 rounded-none bg-[#FDC800] border-4 border-black flex items-center justify-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
@@ -147,6 +167,7 @@ export function CVDropzone() {
                 type="file"
                 accept="application/pdf"
                 onChange={handleFileChange}
+                disabled={reviewMode}
                 className="sr-only"
             />
         </div>
