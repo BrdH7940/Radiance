@@ -103,7 +103,7 @@ export default function EnhanceCVPage() {
                     <button
                         type="button"
                         onClick={handleNewAnalysis}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-slate-500 text-sm font-medium hover:text-slate-300 hover:bg-white/5 transition-all duration-200"
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-none border-4 border-black bg-[#FBFBF9] text-[#1C293C] text-sm font-medium shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[4px] hover:translate-y-[4px] transition-all duration-200"
                     >
                         <ChevronLeft className="w-4 h-4" />
                         New analysis
@@ -112,7 +112,7 @@ export default function EnhanceCVPage() {
                     <button
                         type="button"
                         onClick={handleNewAnalysis}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-slate-500 text-sm font-medium hover:text-slate-300 hover:bg-white/5 transition-all duration-200"
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-none border-4 border-black bg-[#FBFBF9] text-[#1C293C] text-sm font-medium shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[4px] hover:translate-y-[4px] transition-all duration-200"
                         title="Start over"
                     >
                         <RotateCcw className="w-3.5 h-3.5" />
@@ -121,10 +121,10 @@ export default function EnhanceCVPage() {
                 </div>
 
                 <div className="animate-in fade-in slide-in-from-bottom-8 duration-500">
-                    <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-white mb-2">
+                    <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-[#1C293C] mb-2">
                         Analysis complete
                     </h1>
-                    <p className="text-slate-400 text-base mb-10">
+                    <p className="text-[#4B5563] text-base mb-10">
                         Your CV has been analyzed against the job description. Review
                         the results below.
                     </p>
@@ -143,29 +143,29 @@ export default function EnhanceCVPage() {
         <div className="px-6 sm:px-8 pt-10 pb-20">
             {/* Hero header */}
             <div className="mb-12 animate-in fade-in slide-in-from-bottom-8 duration-700">
-                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-blue-500/20 bg-blue-500/5 mb-5">
-                    <span className="text-sm font-medium text-blue-400 tracking-wider">
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-none border-4 border-black bg-black text-white mb-5 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                    <span className="text-sm font-medium text-white tracking-wider">
                         Powered by Gemini
                     </span>
                 </div>
 
-                <h1 className="text-4xl sm:text-5xl font-black tracking-tighter text-white mb-3 leading-[1.05]">
+                <h1 className="text-4xl sm:text-5xl font-black tracking-tighter text-[#1C293C] mb-3 leading-[1.05]">
                     Close the Gap,{' '}
-                    <span className="bg-gradient-to-r from-blue-400 via-indigo-400 to-violet-400 bg-clip-text text-transparent">
+                    <span className="bg-[#FDC800] px-4 border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
                         Land the Role.
                     </span>
                 </h1>
 
-                <p className="text-slate-400 text-base max-w-xl leading-relaxed">
+                <p className="text-[#4B5563] text-base max-w-xl leading-relaxed">
                     Upload your CV and the JD.{' '}
-                    <strong className="text-slate-300">Radiance</strong> analyzes the
+                    <strong className="text-[#1C293C]">Radiance</strong> analyzes the
                     gap and enhances the CV to be more attractive.
                 </p>
             </div>
 
             {/* Validation error */}
             {validationError && (
-                <div className="mb-6 flex items-center gap-3 px-4 py-3 rounded-2xl border border-amber-500/30 bg-amber-500/5 max-w-2xl animate-in fade-in duration-300">
+                <div className="mb-6 flex items-center gap-3 px-4 py-3 rounded-none border-4 border-black bg-[#FBFBF9] max-w-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] animate-in fade-in duration-300">
                     <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
                     <p className="text-sm text-amber-400">{validationError}</p>
                 </div>
@@ -176,10 +176,10 @@ export default function EnhanceCVPage() {
                 className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10 animate-in fade-in slide-in-from-bottom-8 duration-700"
                 style={{ animationDelay: '150ms' }}
             >
-                <div className="min-h-[460px]">
+                <div className="min-h-[460px] border-4 border-black bg-[#FBFBF9] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-6">
                     <CVDropzone />
                 </div>
-                <div className="min-h-[460px]">
+                <div className="min-h-[460px] border-4 border-black bg-[#FBFBF9] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-6">
                     <JDTextarea />
                 </div>
             </div>
@@ -198,13 +198,13 @@ export default function EnhanceCVPage() {
                         font-bold text-base tracking-wide transition-all duration-500
                         ${
                             canAnalyze && !isAnalyzing
-                                ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 text-white shadow-xl shadow-blue-900/40 hover:shadow-blue-800/50 hover:scale-[1.03] hover:brightness-110 cursor-pointer'
-                                : 'bg-white/5 text-slate-600 border border-white/8 cursor-not-allowed'
+                                ? 'border-4 border-black bg-[#FDC800] text-[#1C293C] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[4px] hover:translate-y-[4px] cursor-pointer'
+                                : 'bg-[#FBFBF9] text-[#4B5563] border-4 border-black cursor-not-allowed opacity-60'
                         }
                     `}
                 >
                     {canAnalyze && !isAnalyzing && (
-                        <span className="absolute inset-0 rounded-[2rem] bg-gradient-to-r from-white/0 via-white/10 to-white/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                        <span className="absolute inset-0 rounded-none bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                     )}
                     <Sparkles className="w-5 h-5 relative z-10" strokeWidth={2} />
                     <span className="relative z-10">Analyze &amp; Enhance CV</span>
@@ -212,7 +212,7 @@ export default function EnhanceCVPage() {
             </div>
 
             {!canAnalyze && (
-                <p className="text-center text-slate-700 text-xs mt-4 animate-in fade-in duration-500">
+                <p className="text-center text-[#4B5563] text-xs mt-4 animate-in fade-in duration-500">
                     {!cvFile && !jdText.trim()
                         ? 'Upload your CV and paste a JD (50+ characters) to continue.'
                         : !cvFile

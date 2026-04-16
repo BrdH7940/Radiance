@@ -39,21 +39,21 @@ export function RedFlags({ flags, className = '' }: RedFlagsProps) {
   if (flags.length === 0) {
     return (
       <div
-        className={`rounded-2xl border border-white/5 bg-white/[0.02] p-5 ${className}`}
+        className={`rounded-none border-4 border-black bg-[#FBFBF9] p-5 ${className}`}
       >
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-3">
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-[#4B5563] mb-3">
           Red flags
         </h3>
-        <p className="text-slate-500 text-sm">No red flags identified.</p>
+        <p className="text-[#4B5563] text-sm">No red flags identified.</p>
       </div>
     )
   }
 
   return (
     <div
-      className={`rounded-2xl border border-white/5 bg-white/[0.02] p-5 ${className}`}
+      className={`rounded-none border-4 border-black bg-[#FBFBF9] p-5 ${className}`}
     >
-      <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-3">
+      <h3 className="text-sm font-semibold uppercase tracking-wider text-[#4B5563] mb-3">
         Red flags ({flags.length})
       </h3>
       <ul className="flex flex-col gap-3">
@@ -62,7 +62,7 @@ export function RedFlags({ flags, className = '' }: RedFlagsProps) {
           return (
             <li
               key={`${flag.title}-${i}`}
-              className={`rounded-xl border px-4 py-3 ${style.border}`}
+              className={`rounded-none border-4 border-black px-4 py-3 ${style.border}`}
             >
               <div className="flex gap-3">
                 <AlertTriangle
@@ -71,7 +71,7 @@ export function RedFlags({ flags, className = '' }: RedFlagsProps) {
                 />
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-sm font-semibold text-white">
+                    <span className="text-sm font-semibold text-[#1C293C]">
                       {flag.title}
                     </span>
                     <span
@@ -80,7 +80,7 @@ export function RedFlags({ flags, className = '' }: RedFlagsProps) {
                       {style.label}
                     </span>
                   </div>
-                  <p className="text-slate-400 text-sm leading-relaxed">
+                  <p className="text-[#4B5563] text-sm leading-relaxed">
                     {flag.description}
                   </p>
                 </div>

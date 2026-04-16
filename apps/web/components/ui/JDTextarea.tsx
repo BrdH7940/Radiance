@@ -123,31 +123,31 @@ export function JDTextarea() {
         <div className="flex flex-col h-full">
             {/* Label row */}
             <div className="flex items-center gap-2 mb-4">
-                <div className="w-10 h-10 rounded-xl bg-violet-600/10 border border-violet-600/30 flex items-center justify-center text-violet-500 font-black">
+                <div className="w-10 h-10 rounded-none bg-[#FDC800] border-4 border-black flex items-center justify-center text-[#1C293C] font-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
                     02
                 </div>
-                <div className="h-px flex-1 bg-white/5" />
-                <span className="text-base font-medium text-slate-600">
+                <div className="h-px flex-1 bg-black/20" />
+                <span className="text-base font-medium text-[#4B5563]">
                     Plain text
                 </span>
             </div>
 
-            <p className="text-xl font-black tracking-tight text-white mb-1">
+            <p className="text-xl font-black tracking-tight text-[#1C293C] mb-1">
                 Job Description
             </p>
-            <p className="text-base text-slate-500 mb-5">
+            <p className="text-base text-[#4B5563] mb-5">
                 Paste the full JD so AI can identify the skill gaps.
             </p>
 
             {/* Textarea container */}
-            <div className="flex-1 flex flex-col min-h-[320px] rounded-[2.5rem] border border-white/10 bg-[#0a0f18] overflow-hidden transition-all duration-500 focus-within:border-indigo-500/40 focus-within:shadow-[0_0_0_1px_rgba(99,102,241,0.15)]">
+            <div className="flex-1 flex flex-col min-h-[320px] rounded-none border-4 border-black bg-[#FBFBF9] overflow-hidden transition-all duration-500 focus-within:border-black focus-within:shadow-[0_0_0_1px_rgba(0,0,0,0.15)]">
                 {/* Header bar */}
-                <div className="flex items-center gap-2 px-5 py-3 border-b border-white/5">
+                <div className="flex items-center gap-2 px-5 py-3 border-b-4 border-black">
                     <FileSearch
-                        className="w-4 h-4 text-slate-500"
+                        className="w-4 h-4 text-[#1C293C]"
                         strokeWidth={1.5}
                     />
-                    <span className="text-sm font-medium text-slate-500 tracking-wide">
+                    <span className="text-sm font-medium text-[#4B5563] tracking-wide">
                         job_description.txt
                     </span>
                 </div>
@@ -159,17 +159,17 @@ export function JDTextarea() {
                     onChange={(e) => setJdText(e.target.value)}
                     placeholder={PLACEHOLDER}
                     className="
-            flex-1 w-full px-5 py-4 bg-transparent text-slate-300 text-base
+            flex-1 w-full px-5 py-4 bg-transparent text-[#1C293C] text-base
             leading-relaxed resize-none outline-none
-            placeholder:text-slate-700
+            placeholder:text-[#4B5563]
             scrollbar-thin jd-scrollbar
           "
                     spellCheck={false}
                 />
 
                 {/* Footer counter */}
-                <div className="flex items-center justify-between px-5 py-2.5 border-t border-white/5 bg-white/[0.015]">
-                    <span className="text-sm text-slate-600">
+                <div className="flex items-center justify-between px-5 py-2.5 border-t-4 border-black bg-[#FBFBF9]">
+                    <span className="text-sm text-[#4B5563]">
                         {charCount > 0 ? (
                             <>
                                 <span
@@ -190,7 +190,7 @@ export function JDTextarea() {
                         </span>
                     )}
 
-                    <span className="text-sm text-slate-700 tabular-nums">
+                    <span className="text-sm text-[#4B5563] tabular-nums">
                         {charCount.toLocaleString()} chars
                     </span>
                 </div>

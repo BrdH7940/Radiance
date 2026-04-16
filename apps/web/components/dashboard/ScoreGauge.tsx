@@ -44,7 +44,7 @@ export function ScoreGauge({
           fill="none"
           stroke="currentColor"
           strokeWidth={strokeWidth}
-          className="text-white/10"
+          className="text-[#1C293C]/10"
         />
         <circle
           cx={size / 2}
@@ -58,7 +58,7 @@ export function ScoreGauge({
           className={`${color} transition-all duration-700 ease-out`}
         />
       </svg>
-      <span className="absolute text-2xl sm:text-3xl font-black text-white tabular-nums">
+      <span className="absolute text-2xl sm:text-3xl font-black text-[#1C293C] tabular-nums">
         {clamped}
       </span>
     </div>

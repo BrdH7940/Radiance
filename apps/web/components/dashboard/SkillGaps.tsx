@@ -38,21 +38,21 @@ export function SkillGaps({ gaps, className = '' }: SkillGapsProps) {
   if (gaps.length === 0) {
     return (
       <div
-        className={`rounded-2xl border border-white/5 bg-white/[0.02] p-5 ${className}`}
+        className={`rounded-none border-4 border-black bg-[#FBFBF9] p-5 ${className}`}
       >
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-3">
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-[#4B5563] mb-3">
           Skill gaps
         </h3>
-        <p className="text-slate-500 text-sm">No major gaps identified.</p>
+        <p className="text-[#4B5563] text-sm">No major gaps identified.</p>
       </div>
     )
   }
 
   return (
     <div
-      className={`rounded-2xl border border-white/5 bg-white/[0.02] p-5 ${className}`}
+      className={`rounded-none border-4 border-black bg-[#FBFBF9] p-5 ${className}`}
     >
-      <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-3">
+      <h3 className="text-sm font-semibold uppercase tracking-wider text-[#4B5563] mb-3">
         Skill gaps ({gaps.length})
       </h3>
       <ul className="flex flex-col gap-2">
@@ -61,13 +61,13 @@ export function SkillGaps({ gaps, className = '' }: SkillGapsProps) {
           return (
             <li
               key={`${gap.skill}-${i}`}
-              className={`flex items-center justify-between gap-3 rounded-xl px-3 py-2 ${style.bg}`}
+              className={`flex items-center justify-between gap-3 rounded-none border-4 border-black px-3 py-2 ${style.bg}`}
             >
               <span className={`text-sm font-medium ${style.text}`}>
                 {gap.skill}
               </span>
               <span
-                className={`text-xs font-medium px-2 py-0.5 rounded-md border ${style.text} ${style.bg}`}
+                className={`text-xs font-medium px-2 py-0.5 rounded-none border-4 border-black ${style.text} ${style.bg}`}
               >
                 {style.label}
               </span>
