@@ -12,7 +12,7 @@ import boto3
 from botocore.exceptions import ClientError
 
 from config import AppSettings
-from domain.ports import IStorageService
+from core.ports.storage_port import IStorageService
 
 logger = logging.getLogger(__name__)
 

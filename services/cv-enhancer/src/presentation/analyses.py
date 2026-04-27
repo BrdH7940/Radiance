@@ -14,7 +14,7 @@ GET /api/v1/analyses/{id}
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
 
@@ -23,9 +23,9 @@ from pydantic import BaseModel, Field
 
 from container import get_job_repository, get_sqs_service
 from core.domain.analysis_job import AnalysisJob, AnalysisResult, JobStatus, RedFlag
+from core.domain.skill_gap import SkillGap
 from core.ports.job_repository_port import IJobRepository
-from domain.models import SkillGap
-from infrastructure.adapters.sqs_service import SQSService
+from core.ports.sqs_port import ISQSService
 from presentation.dependencies.auth import get_current_user_id
 from presentation.dependencies.rate_limiter import check_analysis_rate_limit
 
@@ -125,7 +125,7 @@ async def create_analysis(
     payload: CreateAnalysisRequest,
     user_id: str = Depends(get_current_user_id),
     _rate_check: None = Depends(check_analysis_rate_limit),
-    sqs_service: SQSService = Depends(get_sqs_service),
+    sqs_service: ISQSService = Depends(get_sqs_service),
     job_repo: IJobRepository = Depends(get_job_repository),
 ) -> CreateAnalysisResponse:
     """Queue a new CV analysis job and immediately return the job ID."""
@@ -140,8 +140,8 @@ async def create_analysis(
         jd_text=payload.jd_text,
         job_title=payload.job_title,
         company_name=payload.company_name,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=datetime.now(tz=timezone.utc),
+        updated_at=datetime.now(tz=timezone.utc),
     )
     await job_repo.save(job)
 

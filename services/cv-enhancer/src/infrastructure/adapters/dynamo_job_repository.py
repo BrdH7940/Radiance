@@ -1,8 +1,13 @@
+import logging
+
 import boto3
+from boto3.dynamodb.conditions import Attr, Key as DynamoKey
 from botocore.exceptions import ClientError
+
 from core.domain.analysis_job import AnalysisJob
 from core.ports.job_repository_port import IJobRepository
-from boto3.dynamodb.conditions import Attr, Key as DynamoKey
+
+logger = logging.getLogger(__name__)
 
 
 class DynamoJobRepository(IJobRepository):
@@ -62,7 +67,7 @@ class DynamoJobRepository(IJobRepository):
         try:
             self.table.put_item(Item=item)
         except ClientError as e:
-            print(f"Error saving to DynamoDB: {e.response['Error']['Message']}")
+            logger.error("Error saving to DynamoDB: %s", e.response["Error"]["Message"])
             raise
 
     async def get(self, job_id: str) -> AnalysisJob | None:
@@ -103,7 +108,7 @@ class DynamoJobRepository(IJobRepository):
                 return None
             return AnalysisJob.model_validate(item)
         except ClientError as e:
-            print(f"Error getting from DynamoDB: {e.response['Error']['Message']}")
+            logger.error("Error getting from DynamoDB: %s", e.response["Error"]["Message"])
             raise
 
     async def update(self, job: AnalysisJob) -> None:
@@ -115,5 +120,5 @@ class DynamoJobRepository(IJobRepository):
         try:
             self.table.put_item(Item=item)
         except ClientError as e:
-            print(f"Error updating DynamoDB: {e.response['Error']['Message']}")
+            logger.error("Error updating DynamoDB: %s", e.response["Error"]["Message"])
             raise

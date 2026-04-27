@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 
 from core.domain.analysis_job import RedFlag
 from core.domain.cv_resume_schema import CVResumeSchema
-from domain.models import SkillGap
+from core.domain.skill_gap import SkillGap
 
 
 class FullAnalysisOutput(BaseModel):

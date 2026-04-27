@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from core.domain.analysis_job import RedFlag
 from core.domain.cv_resume_schema import CVResumeSchema
+from core.domain.skill_gap import SkillGap
 from core.ports.llm_port import FullAnalysisOutput, ILLMService
 from core.prompts.cv_analysis_prompt import (
     ANALYZER_HUMAN_PROMPT,
@@ -25,7 +26,6 @@ from core.prompts.cv_analysis_prompt import (
     ENHANCER_HUMAN_PROMPT,
     ENHANCER_SYSTEM_PROMPT,
 )
-from domain.models import SkillGap
 
 logger = logging.getLogger(__name__)
 

@@ -11,7 +11,7 @@ from typing import List, Literal, Optional
 from pydantic import BaseModel, Field
 
 from core.domain.cv_resume_schema import CVResumeSchema
-from domain.models import SkillGap  # Reuse the validated SkillGap from core domain.
+from core.domain.skill_gap import SkillGap
 
 
 class JobStatus(str, Enum):

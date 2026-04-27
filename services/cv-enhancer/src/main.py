@@ -174,9 +174,7 @@ def handler(event, context):
     """
     # Nếu event chứa key "Records", đó là sự kiện từ SQS.
     if isinstance(event, dict) and "Records" in event:
-        # Vì Lambda handler là đồng bộ, ta dùng loop để chạy async logic.
-        loop = asyncio.get_event_loop()
-        return loop.run_until_complete(process_sqs_records(event))
+        return asyncio.run(process_sqs_records(event))
 
     # Ngược lại, đó là HTTP request (API Gateway hoặc Lambda Function URL).
     return mangum_handler(event, context)

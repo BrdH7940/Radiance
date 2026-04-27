@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 from config import AppSettings, get_settings
 from container import get_storage_service
-from domain.ports import IStorageService
+from core.ports.storage_port import IStorageService
 from presentation.dependencies.auth import get_current_user_id
 
 logger = logging.getLogger(__name__)

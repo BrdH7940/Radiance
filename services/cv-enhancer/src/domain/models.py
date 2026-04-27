@@ -1,22 +1,11 @@
 """
-Domain models for the CV Enhancer service.
+Backward-compatibility re-exports.
+
+The canonical location for SkillGap is now ``core.domain.skill_gap``.
+This module is kept as a shim so that existing external imports continue
+to work during the transition. Prefer importing directly from ``core``.
 """
 
-from typing import Literal
-from pydantic import BaseModel, Field
+from core.domain.skill_gap import SkillGap
 
-
-class SkillGap(BaseModel):
-    """Skill or qualification present in the JD but absent/weak in the CV."""
-
-    skill: str = Field(
-        description="The concrete name of the missing skill, technology, or qualification."
-    )
-    importance: Literal["critical", "recommended", "nice-to-have"] = Field(
-        description=(
-            "How critical this gap is for the role: "
-            "'critical' = deal-breaker, "
-            "'recommended' = strongly preferred, "
-            "'nice-to-have' = bonus."
-        )
-    )
+__all__ = ["SkillGap"]

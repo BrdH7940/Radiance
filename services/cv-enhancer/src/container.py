@@ -9,13 +9,14 @@ on every HTTP request while remaining testable via cache_clear().
 Dependency graph
 ----------------
 AppSettings
-  ├─ S3StorageAdapter              (implements IStorageService)
-  ├─ PDFPlumberParser              (implements IDocumentParser)
-  ├─ GeminiLLMAdapter              (implements ILLMService)
-  ├─ DynamoJobRepository           (implements IJobRepository)
-  ├─ WeasyPrintPDFAdapter          (implements IPDFRenderService)
-  ├─ SupabaseProjectRepository     (implements IProjectRepository)
-  ├─ SupabaseHistoryRepository     (implements IHistoryRepository)
+  ├─ S3StorageAdapter              (implements core.ports.storage_port.IStorageService)
+  ├─ PDFPlumberParser              (implements core.ports.document_parser_port.IDocumentParser)
+  ├─ GeminiLLMAdapter              (implements core.ports.llm_port.ILLMService)
+  ├─ DynamoJobRepository           (implements core.ports.job_repository_port.IJobRepository)
+  ├─ SQSService                    (implements core.ports.sqs_port.ISQSService)
+  ├─ WeasyPrintPDFAdapter          (implements core.ports.pdf_render_port.IPDFRenderService)
+  ├─ SupabaseProjectRepository     (implements core.ports.project_repository_port.IProjectRepository)
+  ├─ SupabaseHistoryRepository     (implements core.ports.history_repository_port.IHistoryRepository)
   └─ AnalyzeCVUseCase              ← consumes the above
 """
 
@@ -24,13 +25,15 @@ from functools import lru_cache
 from pathlib import Path
 
 from config import AppSettings, get_settings
+from core.ports.document_parser_port import IDocumentParser
 from core.ports.history_repository_port import IHistoryRepository
 from core.ports.job_repository_port import IJobRepository
 from core.ports.llm_port import ILLMService
 from core.ports.pdf_render_port import IPDFRenderService
 from core.ports.project_repository_port import IProjectRepository
+from core.ports.sqs_port import ISQSService
+from core.ports.storage_port import IStorageService
 from core.use_cases.analyze_cv_use_case import AnalyzeCVUseCase
-from domain.ports import IStorageService
 from infrastructure.adapters.dynamo_job_repository import DynamoJobRepository
 from infrastructure.adapters.gemini_llm_adapter import GeminiLLMAdapter
 from infrastructure.adapters.supabase_client import get_supabase_client
@@ -65,7 +68,7 @@ def get_storage_service() -> IStorageService:
 
 
 @lru_cache(maxsize=1)
-def get_document_parser() -> PDFPlumberParser:
+def get_document_parser() -> IDocumentParser:
     """Singleton pdfplumber PDF parser."""
     logger.info("Initialising PDFPlumberParser…")
     return PDFPlumberParser()
@@ -101,7 +104,7 @@ def get_job_repository() -> IJobRepository:
 
 
 @lru_cache(maxsize=1)
-def get_sqs_service() -> SQSService:
+def get_sqs_service() -> ISQSService:
     """Singleton SQSService for sending jobs to SQS."""
     settings: AppSettings = get_settings()
     logger.info("Initialising SQSService (queue: '%s')…", settings.sqs_queue_url)

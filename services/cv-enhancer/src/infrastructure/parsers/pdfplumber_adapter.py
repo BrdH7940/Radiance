@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pdfplumber
 
-from domain.ports import IDocumentParser
+from core.ports.document_parser_port import IDocumentParser
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ class PDFPlumberParser(IDocumentParser):
 
         logger.info("PDFPlumberParser: parsing '%s'.", file_path)
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         parse_fn = partial(self._extract_text, str(path))
         text: str = await loop.run_in_executor(None, parse_fn)
 

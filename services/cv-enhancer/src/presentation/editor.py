@@ -3,6 +3,7 @@ FastAPI router for the workspace editor:
   - Renders: CVResumeSchema JSON → HTML → PDF (WeasyPrint) → S3 presigned URL.
 """
 
+import logging
 import tempfile
 from uuid import uuid4
 
@@ -13,9 +14,11 @@ from config import AppSettings, get_settings
 from container import get_pdf_renderer, get_storage_service
 from core.domain.cv_resume_schema import CVResumeSchema
 from core.ports.pdf_render_port import IPDFRenderService
-from domain.ports import IStorageService
+from core.ports.storage_port import IStorageService
 from presentation.dependencies.auth import get_current_user_id
 from presentation.dependencies.rate_limiter import check_editor_rate_limit
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/editor", tags=["Editor"])
 

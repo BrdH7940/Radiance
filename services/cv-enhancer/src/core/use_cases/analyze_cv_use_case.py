@@ -1,7 +1,7 @@
 """
 Use Case: Analyse and enhance a CV asynchronously.
 
-This class is the sole orchestrator of the 7-step background pipeline.
+This class is the sole orchestrator of the 8-step background pipeline.
 It depends only on ports (interfaces) — never on concrete adapters or cloud SDKs.
 
 Pipeline steps
@@ -13,6 +13,7 @@ Pipeline steps
 5.  Render the CVResumeSchema to PDF via HTML/WeasyPrint (IPDFRenderService).
 6.  Upload the compiled PDF to storage under the enhanced-pdf/ prefix.
 7.  Generate a presigned download URL and persist the completed result to the repository.
+8.  Persist a CVHistoryEntry to Supabase (authenticated jobs only, non-critical).
 
 Any exception in steps 2–7 marks the job as FAILED with a structured error message
 so that the background task never fails silently.
@@ -21,18 +22,19 @@ so that the background task never fails silently.
 import logging
 import os
 import tempfile
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID, uuid4
 
 from config import AppSettings
 from core.domain.analysis_job import AnalysisJob, AnalysisResult, JobStatus
 from core.domain.cv_history import CVHistoryEntry
+from core.ports.document_parser_port import IDocumentParser
 from core.ports.history_repository_port import IHistoryRepository
 from core.ports.job_repository_port import IJobRepository
 from core.ports.llm_port import ILLMService
 from core.ports.pdf_render_port import IPDFRenderService
-from domain.ports import IDocumentParser, IStorageService
+from core.ports.storage_port import IStorageService
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +90,7 @@ class AnalyzeCVUseCase:
                 job.model_copy(
                     update={
                         "status": JobStatus.PROCESSING,
-                        "updated_at": datetime.utcnow(),
+                        "updated_at": datetime.now(tz=timezone.utc),
                     }
                 )
             )
@@ -171,7 +173,7 @@ class AnalyzeCVUseCase:
                     job_title=job.job_title,
                     company_name=job.company_name,
                     created_at=job.created_at,
-                    updated_at=datetime.utcnow(),
+                    updated_at=datetime.now(tz=timezone.utc),
                     result=result,
                 )
                 await self._job_repo.update(updated_job)
@@ -228,8 +230,8 @@ class AnalyzeCVUseCase:
                 jd_text=jd_text,
                 job_title=existing.job_title if existing else None,
                 company_name=existing.company_name if existing else None,
-                created_at=existing.created_at if existing else datetime.utcnow(),
-                updated_at=datetime.utcnow(),
+                created_at=existing.created_at if existing else datetime.now(tz=timezone.utc),
+                updated_at=datetime.now(tz=timezone.utc),
                 error=error_message,
             )
             await self._job_repo.update(failed_job)
