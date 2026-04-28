@@ -23,8 +23,9 @@ jobs:
             - name: Install dependencies
               run: pip install -r services/cv-enhancer/requirements.txt
 
-            - name: Run tests
-              run: pytest services/cv-enhancer/tests/ -v
+            - name: Run tests with coverage (fail if < 70%)
+              working-directory: services/cv-enhancer
+              run: pytest tests/ -v --cov=src --cov-report=term-missing --cov-fail-under=70
 
     deploy:
         needs: test

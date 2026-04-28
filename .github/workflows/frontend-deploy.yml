@@ -29,6 +29,10 @@ jobs:
               working-directory: apps/web
               run: npm run lint
 
+            - name: Run unit tests (coverage must be >= 70%)
+              working-directory: apps/web
+              run: npm run test:coverage
+
             - name: Build
               working-directory: apps/web
               env:

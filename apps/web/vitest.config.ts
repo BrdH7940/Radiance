@@ -13,6 +13,12 @@ export default defineConfig({
             reporter: ['text', 'lcov'],
             include: ['lib/**', 'store/**', 'services/**'],
             exclude: ['lib/supabase/**'],
+            thresholds: {
+                lines: 70,
+                functions: 70,
+                branches: 70,
+                statements: 70,
+            },
         },
     },
     resolve: {
