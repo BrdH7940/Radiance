@@ -11,6 +11,7 @@ import {
     CheckCircle2,
     AlertCircle,
     SplitSquareHorizontal,
+    Sparkles,
 } from 'lucide-react'
 import { NavBar } from '@/components/ui/NavBar'
 import { CVFormBuilder } from '@/components/editor/CVFormBuilder'
@@ -43,7 +44,18 @@ function WorkspacePageInner() {
         setPdfUrl,
         setPhase,
         setInputReviewMode,
+        selectedProjectIds,
     } = useCVStore()
+
+    // When the CV came from the gallery flow, mark all injected projects with the AI badge.
+    // The strategic enhancer replaces the entire projects section, so all current projects
+    // are gallery-sourced when selectedProjectIds is non-empty.
+    const aiRecommendedProjectIndices =
+        selectedProjectIds.length > 0
+            ? (cvData?.projects.map((_, i) => i) ?? [])
+            : []
+
+    const isGalleryEnhanced = selectedProjectIds.length > 0
 
     const [isRendering, setIsRendering] = useState(false)
     const [notifications, setNotifications] = useState<Notification[]>([])
@@ -225,10 +237,17 @@ function WorkspacePageInner() {
                     <span className="hidden sm:block">CV Editor</span>
                 </div>
 
+                {isGalleryEnhanced && (
+                    <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-none border-2 border-black bg-[#FDC800] text-[#1C293C] text-xs font-bold">
+                        <Sparkles className="w-3 h-3" strokeWidth={2.5} />
+                        Strategic Mode
+                    </div>
+                )}
+
                 <div className="flex-1" />
 
                 <div className="flex items-center gap-2">
-                    {/* Render PDF */}
+                    {/* Sync Changes / Render PDF */}
                     <button
                         onClick={handleRenderPdf}
                         disabled={isRendering}
@@ -237,7 +256,7 @@ function WorkspacePageInner() {
                         <RefreshCw
                             className={`w-3.5 h-3.5 ${isRendering ? 'animate-spin' : ''}`}
                         />
-                        {isRendering ? 'Rendering…' : 'Render PDF'}
+                        {isRendering ? 'Rendering…' : isGalleryEnhanced ? 'Sync Changes' : 'Render PDF'}
                     </button>
 
                     {/* Export JSON */}
@@ -287,6 +306,7 @@ function WorkspacePageInner() {
                         <CVFormBuilder
                             cvData={cvData}
                             onChange={handleCvChange}
+                            aiRecommendedProjectIndices={aiRecommendedProjectIndices}
                         />
                     </div>
                 </div>

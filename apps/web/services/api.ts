@@ -95,6 +95,42 @@ export interface CVResumeSchema {
     projects: CVProject[]
     skill_groups: CVSkillGroup[]
     awards_certifications: CVAwardsCertification[]
+    /** Populated by Strategic mode when gallery is empty/unrelated. */
+    recommended_actions?: string[]
+}
+
+// ─── Gallery / Strategic mode types ──────────────────────────────────────────
+
+/** FSM phase for the Strategic Gallery enhancement flow (parallel to legacy `AppPhase`). */
+export type GalleryPhase = 'IDLE' | 'ANALYZING' | 'CONSULTING_GALLERY' | 'FINALIZING' | 'ERROR'
+
+/** Adapter view of a project_gallery row sent to the AI worker and backend. */
+export interface ProjectItem {
+    id: string
+    title: string
+    description: string | null
+    tech_stack: string[]
+}
+
+/** A single ranked project result from the WebWorker or fallback API. */
+export interface ClientAIResult {
+    project_id: string
+    /** Cosine similarity score in [0, 1]. */
+    fit_score: number
+    client_reasoning: string
+}
+
+/** POST /api/v1/analyses/enhance-from-gallery */
+export interface EnhanceFromGalleryRequest {
+    cv_text: string
+    jd_text: string
+    client_results: ClientAIResult[]
+}
+
+/** POST /api/v1/fallback/client-ai */
+export interface FallbackClientAIRequest {
+    jd_text: string
+    project_gallery: ProjectItem[]
 }
 
 // ─── API response types ───────────────────────────────────────────────────────
@@ -331,4 +367,36 @@ export async function renderCvToPdf(cvData: CVResumeSchema): Promise<EditorRende
         throw new Error(data.error || `Render failed (${res.status})`)
     }
     return data
+}
+
+// ─── Gallery / Strategic mode APIs ───────────────────────────────────────────
+
+/**
+ * Fallback for when the client-side WebWorker cannot load (no WebGPU / OOM).
+ * Sends the full gallery to Gemini on the server and gets back ranked results.
+ */
+export async function callFallbackClientAI(
+    request: FallbackClientAIRequest
+): Promise<ClientAIResult[]> {
+    const token = await getSupabaseToken()
+    return getJson<ClientAIResult[]>(
+        `${API_BASE}/api/v1/fallback/client-ai`,
+        { method: 'POST', body: JSON.stringify(request) },
+        token
+    )
+}
+
+/**
+ * Kick off a strategic CV enhancement from the gallery.
+ * Returns a job ID to poll via the standard GET /api/v1/analyses/{id} endpoint.
+ */
+export async function enhanceFromGallery(
+    request: EnhanceFromGalleryRequest
+): Promise<CreateAnalysisResponse> {
+    const token = await getSupabaseToken()
+    return getJson<CreateAnalysisResponse>(
+        `${API_BASE}/api/v1/analyses/enhance-from-gallery`,
+        { method: 'POST', body: JSON.stringify(request) },
+        token
+    )
 }

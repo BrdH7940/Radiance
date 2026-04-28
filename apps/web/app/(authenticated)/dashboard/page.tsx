@@ -1,21 +1,33 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-    Sparkles,
     AlertCircle,
+    BookMarked,
     ChevronLeft,
+    Loader2,
     RotateCcw,
+    Sparkles,
+    Zap,
 } from 'lucide-react'
 import { CVDropzone } from '@/components/ui/CVDropzone'
 import { JDTextarea } from '@/components/ui/JDTextarea'
 import { AnalyzingOverlay } from '@/components/ui/AnalyzingOverlay'
 import { AnalysisDashboard } from '@/components/dashboard/AnalysisDashboard'
+import { ProjectSelectionHub } from '@/components/dashboard/ProjectSelectionHub'
 import { useCVStore } from '@/store/useCVStore'
-import { uploadAndAnalyze } from '@/services/api'
+import { uploadAndAnalyze, AnalysisService } from '@/services/api'
+import type { ProjectItem } from '@/services/api'
+import { analyzeProjectsWithClientAI, type OnProgressCallback } from '@/services/aiClientService'
 
 const MIN_JD_LENGTH = 50
+
+const GALLERY_STEP_LABELS: Record<0 | 1 | 2, string> = {
+    0: 'Starting AI analysis…',
+    1: 'Step 1/2: Ranking Projects…',
+    2: 'Step 2/2: Generating AI Reasoning…',
+}
 
 export default function EnhanceCVPage() {
     const router = useRouter()
@@ -25,6 +37,9 @@ export default function EnhanceCVPage() {
         phase,
         inputReviewMode,
         analysisResult,
+        galleryPhase,
+        galleryLoadingStep,
+        projectGallery,
         setPhase,
         setInputReviewMode,
         setLoadingStepIndex,
@@ -33,22 +48,90 @@ export default function EnhanceCVPage() {
         setCvData,
         setPdfUrl,
         reset,
+        startGalleryAnalysis,
+        consultGallery,
+        setGalleryError,
+        setProjectGallery,
+        setGalleryLoadingStep,
     } = useCVStore()
 
     const [validationError, setValidationError] = useState<string | null>(null)
+    const [galleryJobId, setGalleryJobId] = useState<string | null>(null)
 
     const canAnalyze = !!cvFile && jdText.trim().length >= MIN_JD_LENGTH
     const isAnalyzing = phase === 'analyzing'
+    const isGalleryAnalyzing = galleryPhase === 'ANALYZING'
 
+    // ── Load project gallery once on mount ────────────────────────────────────
+    useEffect(() => {
+        if (projectGallery.length > 0) return
+
+        const loadGallery = async () => {
+            try {
+                const { getSupabaseToken } = await import('@/services/api')
+                const token = await getSupabaseToken()
+                if (!token) return
+
+                const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+                const res = await fetch(`${API_BASE}/api/v1/projects`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                })
+                if (!res.ok) return
+
+                const data = (await res.json()) as Array<{
+                    id: string
+                    title: string
+                    description: string | null
+                    technologies: string[]
+                }>
+                const items: ProjectItem[] = data.map((p) => ({
+                    id: p.id,
+                    title: p.title,
+                    description: p.description,
+                    tech_stack: p.technologies,
+                }))
+                setProjectGallery(items)
+            } catch {
+                // Non-fatal: gallery is optional for the legacy flow
+            }
+        }
+        void loadGallery()
+    }, [projectGallery.length, setProjectGallery])
+
+    // ── Poll for gallery job completion ────────────────────────────────────────
+    useEffect(() => {
+        if (!galleryJobId || galleryPhase !== 'FINALIZING') return
+
+        const intervalId = setInterval(async () => {
+            try {
+                const statusResponse = await AnalysisService.pollJobStatus(galleryJobId)
+                if (statusResponse.status === 'completed' && statusResponse.result) {
+                    clearInterval(intervalId)
+                    setCvData(statusResponse.result.enhanced_cv_json)
+                    setPdfUrl(statusResponse.result.pdf_url)
+                    setPhase('workspace')
+                    router.push('/workspace')
+                } else if (statusResponse.status === 'failed') {
+                    clearInterval(intervalId)
+                    setGalleryError(statusResponse.error ?? 'Gallery enhancement failed.')
+                }
+            } catch {
+                clearInterval(intervalId)
+                setGalleryError('Failed to poll gallery job status.')
+            }
+        }, 2000)
+
+        return () => clearInterval(intervalId)
+    }, [galleryJobId, galleryPhase, setCvData, setPdfUrl, setPhase, setGalleryError, router])
+
+    // ── Legacy analysis handler ────────────────────────────────────────────────
     const handleAnalyze = useCallback(async () => {
         if (!cvFile) {
             setValidationError('Please upload your CV (PDF) first.')
             return
         }
         if (jdText.trim().length < MIN_JD_LENGTH) {
-            setValidationError(
-                'Please paste a job description (at least 50 characters).'
-            )
+            setValidationError('Please paste a job description (at least 50 characters).')
             return
         }
 
@@ -68,19 +151,19 @@ export default function EnhanceCVPage() {
             setPhase('dashboard')
         } else {
             setPhase('upload')
-            setValidationError(
-                result.error ?? 'Something went wrong. Please try again.'
-            )
+            setValidationError(result.error ?? 'Something went wrong. Please try again.')
         }
     }, [
         cvFile,
         jdText,
         setPhase,
+        setInputReviewMode,
         setLoadingStepIndex,
         setJobId,
         setAnalysisResult,
     ])
 
+    // ── Legacy quick enhance ───────────────────────────────────────────────────
     const handleEnhanceWithAI = () => {
         if (!analysisResult) return
         setCvData(analysisResult.enhanced_cv_json)
@@ -89,16 +172,123 @@ export default function EnhanceCVPage() {
         router.push('/workspace')
     }
 
+    // ── Strategic gallery analyze handler ─────────────────────────────────────
+    const handleStrategicAnalyze = useCallback(async () => {
+        if (jdText.trim().length < MIN_JD_LENGTH) {
+            setValidationError('Please paste a job description (at least 50 characters).')
+            return
+        }
+        setValidationError(null)
+        startGalleryAnalysis()
+
+        const onProgress: OnProgressCallback = (step) => {
+            setGalleryLoadingStep(step)
+        }
+
+        try {
+            const results = await analyzeProjectsWithClientAI(jdText, projectGallery, onProgress)
+            consultGallery(results)
+        } catch (err) {
+            setGalleryError(
+                err instanceof Error ? err.message : 'AI analysis failed. Please try again.'
+            )
+        }
+    }, [
+        jdText,
+        projectGallery,
+        startGalleryAnalysis,
+        consultGallery,
+        setGalleryError,
+        setGalleryLoadingStep,
+    ])
+
     const handleNewAnalysis = () => {
         reset()
     }
 
-    // ── Analyzing overlay ────────────────────────────────────────────────────
+    // ── Analyzing overlay (legacy flow) ───────────────────────────────────────
     if (isAnalyzing) {
         return <AnalyzingOverlay />
     }
 
-    // ── Analysis results ─────────────────────────────────────────────────────
+    // ── Gallery AI Loading overlay ─────────────────────────────────────────────
+    if (isGalleryAnalyzing) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6 px-6">
+                <div className="rounded-none border-4 border-black bg-[#FDC800] p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] text-center max-w-sm w-full">
+                    <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3 text-[#1C293C]" />
+                    <p className="font-bold text-[#1C293C] text-sm">
+                        {GALLERY_STEP_LABELS[galleryLoadingStep]}
+                    </p>
+                    <p className="text-xs text-[#1C293C]/70 mt-1">
+                        Running locally in your browser — no API cost
+                    </p>
+                </div>
+                {/* Progress steps */}
+                <div className="flex flex-col gap-2 w-full max-w-sm">
+                    {([1, 2] as const).map((step) => (
+                        <div
+                            key={step}
+                            className={`flex items-center gap-3 text-sm transition-opacity duration-300 ${
+                                galleryLoadingStep >= step ? 'opacity-100' : 'opacity-30'
+                            }`}
+                        >
+                            <div
+                                className={`w-6 h-6 rounded-none border-2 border-black flex items-center justify-center text-xs font-bold ${
+                                    galleryLoadingStep > step
+                                        ? 'bg-green-400'
+                                        : galleryLoadingStep === step
+                                        ? 'bg-[#FDC800] animate-pulse'
+                                        : 'bg-[#FBFBF9]'
+                                }`}
+                            >
+                                {galleryLoadingStep > step ? '✓' : step}
+                            </div>
+                            <span className="text-[#1C293C]">{GALLERY_STEP_LABELS[step]}</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )
+    }
+
+    // ── Project Selection Hub (CONSULTING_GALLERY phase) ──────────────────────
+    if (galleryPhase === 'CONSULTING_GALLERY') {
+        return (
+            <div className="px-6 sm:px-8 pt-8 pb-20 max-w-3xl mx-auto">
+                <ProjectSelectionHub
+                    onJobQueued={(jobId) => {
+                        setGalleryJobId(jobId)
+                        setJobId(jobId)
+                    }}
+                />
+            </div>
+        )
+    }
+
+    // ── Gallery Finalizing (polling) ───────────────────────────────────────────
+    if (galleryPhase === 'FINALIZING') {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 px-6">
+                <div className="rounded-none border-4 border-black bg-[#FBFBF9] p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] text-center max-w-sm w-full">
+                    <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3 text-[#1C293C]" />
+                    <p className="font-bold text-[#1C293C] text-sm">
+                        Generating your strategic CV…
+                    </p>
+                    <p className="text-xs text-[#4B5563] mt-1">
+                        Gemini is rewriting your CV with the selected projects.
+                    </p>
+                </div>
+            </div>
+        )
+    }
+
+    // ── Gallery Error ─────────────────────────────────────────────────────────
+    if (galleryPhase === 'ERROR') {
+        return <GalleryErrorPanel />
+    }
+
+    // ── Analysis results (legacy dashboard) ───────────────────────────────────
     if (phase === 'dashboard' && analysisResult) {
         return (
             <div className="px-6 sm:px-8 pt-8 pb-20">
@@ -111,7 +301,6 @@ export default function EnhanceCVPage() {
                         <ChevronLeft className="w-4 h-4" />
                         New analysis
                     </button>
-
                     <button
                         type="button"
                         onClick={handleNewAnalysis}
@@ -127,10 +316,68 @@ export default function EnhanceCVPage() {
                     <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-[#1C293C] mb-2">
                         Analysis complete
                     </h1>
-                    <p className="text-[#4B5563] text-base mb-10">
-                        Your CV has been analyzed against the job description. Review
-                        the results below.
+                    <p className="text-[#4B5563] text-base mb-6">
+                        Your CV has been analyzed. Choose how to enhance it:
                     </p>
+
+                    {/* Enhancement mode selector */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+                        {/* Button A — Quick Enhance */}
+                        <button
+                            type="button"
+                            onClick={handleEnhanceWithAI}
+                            className="
+                                flex flex-col items-start gap-2 p-5 text-left
+                                rounded-none border-4 border-black bg-[#FBFBF9]
+                                shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]
+                                hover:shadow-none hover:translate-x-[4px] hover:translate-y-[4px]
+                                transition-all duration-200
+                            "
+                        >
+                            <div className="flex items-center gap-2">
+                                <Zap className="w-5 h-5 text-[#1C293C]" />
+                                <span className="font-bold text-[#1C293C] text-sm">
+                                    Quick Enhance (ATS-Friendly)
+                                </span>
+                            </div>
+                            <p className="text-xs text-[#4B5563] leading-relaxed">
+                                Instantly rewrite your CV using AI — STAR method, keyword
+                                optimisation, red flag fixes. Best when your CV already has
+                                relevant experience.
+                            </p>
+                        </button>
+
+                        {/* Button B — Strategic Gallery */}
+                        <button
+                            type="button"
+                            onClick={handleStrategicAnalyze}
+                            disabled={projectGallery.length === 0}
+                            className="
+                                flex flex-col items-start gap-2 p-5 text-left
+                                rounded-none border-4 border-black bg-[#FDC800]
+                                shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]
+                                hover:shadow-none hover:translate-x-[4px] hover:translate-y-[4px]
+                                disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none
+                                transition-all duration-200
+                            "
+                        >
+                            <div className="flex items-center gap-2">
+                                <BookMarked className="w-5 h-5 text-[#1C293C]" />
+                                <span className="font-bold text-[#1C293C] text-sm">
+                                    Optimize with Project Gallery ✨
+                                </span>
+                            </div>
+                            <p className="text-xs text-[#1C293C]/80 leading-relaxed">
+                                AI ranks your saved projects by JD relevance and injects them
+                                into your CV — free, runs entirely in your browser.
+                                {projectGallery.length === 0 && (
+                                    <span className="block mt-1 font-semibold">
+                                        Add projects to your Gallery first.
+                                    </span>
+                                )}
+                            </p>
+                        </button>
+                    </div>
 
                     <AnalysisDashboard
                         result={analysisResult}
@@ -161,8 +408,8 @@ export default function EnhanceCVPage() {
 
                 <p className="text-[#4B5563] text-base max-w-xl leading-relaxed">
                     Upload your CV and the JD.{' '}
-                    <strong className="text-[#1C293C]">Radiance</strong> analyzes the
-                    gap and enhances the CV to be more attractive.
+                    <strong className="text-[#1C293C]">Radiance</strong> analyzes the gap
+                    and enhances the CV to be more attractive.
                 </p>
             </div>
 
@@ -223,6 +470,28 @@ export default function EnhanceCVPage() {
                           : 'Paste a job description (at least 50 characters) to continue.'}
                 </p>
             )}
+        </div>
+    )
+}
+
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+function GalleryErrorPanel() {
+    const { galleryError, resetGallery } = useCVStore()
+    return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 px-6">
+            <div className="rounded-none border-4 border-black bg-[#FBFBF9] p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] text-center max-w-sm w-full">
+                <AlertCircle className="w-8 h-8 mx-auto mb-3 text-red-500" />
+                <p className="font-bold text-[#1C293C] text-sm">Something went wrong</p>
+                <p className="text-xs text-[#4B5563] mt-1">{galleryError}</p>
+                <button
+                    type="button"
+                    onClick={resetGallery}
+                    className="mt-4 px-4 py-2 rounded-none border-2 border-black bg-[#FDC800] text-sm font-bold text-[#1C293C] hover:opacity-80 transition-opacity"
+                >
+                    Try Again
+                </button>
+            </div>
         </div>
     )
 }

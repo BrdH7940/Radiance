@@ -14,6 +14,8 @@ from supabase import Client
 from core.domain.project import CreateProjectRequest, Project
 from core.ports.project_repository_port import IProjectRepository
 
+_UNAUTHORIZED = "Invalid or unauthorized project IDs"
+
 logger = logging.getLogger(__name__)
 
 _TABLE = "project_gallery"
@@ -75,3 +77,44 @@ class SupabaseProjectRepository(IProjectRepository):
                 exc,
             )
             raise
+
+    async def verify_selected(self, user_id: str, selected_ids: List[str]) -> List[Project]:
+        """Verify that all selected_ids exist, are active, and belong to user_id.
+
+        Fetches the source-of-truth from Supabase.  Any ID that is missing,
+        inactive, or owned by a different user causes a ValueError so the
+        presentation layer can return 403 Forbidden to the client.
+
+        This prevents a malicious payload from injecting project IDs that
+        belong to other users into the LLM enhancement pipeline.
+        """
+        if not selected_ids:
+            return []
+        try:
+            response = (
+                self._client.table(_TABLE)
+                .select("*")
+                .eq("user_id", user_id)
+                .eq("is_active", True)
+                .in_("id", selected_ids)
+                .execute()
+            )
+        except Exception as exc:
+            logger.error(
+                "Failed to verify projects for user '%s': %s",
+                user_id,
+                exc,
+            )
+            raise
+
+        found_ids = {str(row["id"]) for row in response.data}
+        invalid_ids = set(selected_ids) - found_ids
+        if invalid_ids:
+            logger.warning(
+                "Unauthorized project IDs for user '%s': %s",
+                user_id,
+                invalid_ids,
+            )
+            raise ValueError(f"{_UNAUTHORIZED}: {invalid_ids}")
+
+        return [Project(**row) for row in response.data]

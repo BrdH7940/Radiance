@@ -184,3 +184,13 @@ class CVResumeSchema(BaseModel):
         default_factory=list,
         description="Awards, scholarships, honours, and professional certifications from the original CV.",
     )
+    recommended_actions: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Populated ONLY when the project gallery is empty or fully unrelated to the JD. "
+            "Each string is a concrete, actionable project the candidate should build to become "
+            "competitive for this role (e.g. 'Build a React e-commerce app using Redux and Stripe "
+            "to demonstrate state management and payment integration'). "
+            "Do NOT populate when relevant projects exist — leave as an empty list."
+        ),
+    )

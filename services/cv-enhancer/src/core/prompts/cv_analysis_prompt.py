@@ -1,5 +1,11 @@
 """
-Prompt templates for the two-node CV analysis pipeline (Analyzer → Enhancer).
+Prompt templates for the CV analysis pipeline.
+
+Modules
+-------
+- Legacy Analyzer → Enhancer pipeline (two-node LangGraph graph).
+- Strategic Gallery Enhancer (single-node, project-injection mode).
+- Fallback Project Ranker (server-side equivalent of the browser WebWorker).
 
 Design decisions
 ----------------
@@ -11,6 +17,8 @@ Design decisions
 Version history
 ---------------
 v1.0 — Initial prompts covering score, gaps, red-flags, and STAR enhancement.
+v2.0 — Strategic mode prompts: gallery project injection, information filtering,
+        recommended_actions for empty/unrelated gallery edge case.
 """
 
 # ---------------------------------------------------------------------------
@@ -143,4 +151,137 @@ ENHANCER_HUMAN_PROMPT: str = """\
 
 Output the complete, submission-ready CV as a structured JSON object matching the provided schema.
 All sections must be fully populated. Do not truncate, summarise, or omit any section.\
+"""
+
+# ---------------------------------------------------------------------------
+# Strategic Enhancer — Gallery Project Injection Mode
+# Produces: CVResumeSchema (with recommended_actions when gallery is empty)
+# ---------------------------------------------------------------------------
+
+STRATEGIC_ENHANCER_SYSTEM_PROMPT: str = (
+    "You are simultaneously a Senior Tech Recruiter with 15+ years of FAANG hiring experience "
+    "and an elite Resume Writer specialising in ATS optimisation and the STAR methodology. "
+    "Your dual perspective lets you write CVs that pass automated filters AND compel human "
+    "reviewers. You are methodical, precise, and ruthlessly honest — you never hallucinate "
+    "project names, metrics, or experience that does not exist in the provided data. "
+    "You output ONLY structured JSON — no Markdown, no LaTeX, no plain text explanation."
+)
+
+STRATEGIC_ENHANCER_HUMAN_PROMPT: str = """\
+## Original CV
+{cv_text}
+
+## Target Job Description
+{jd_text}
+
+## Selected Projects from Candidate's Gallery
+{selected_projects_text}
+
+## Rewriting Instructions
+
+### RULE 0 — Non-Negotiable Integrity Constraints
+- NEVER invent facts, companies, dates, metrics, or technologies not present in the provided data.
+- NEVER copy project data from the JD to claim experience the candidate does not have.
+- If `selected_projects_data` is empty or None, you MUST leave the `projects` array empty and
+  populate `recommended_actions` instead. Do NOT hallucinate projects.
+
+### personal_info — PRESERVE EXACTLY
+- Copy name, email, phone, location, and links verbatim from the original CV.
+- Do NOT alter a single character.
+
+### summary
+- Write exactly 3 sentences targeting the JD:
+  1. Role title + total years of relevant experience + core specialisation.
+  2. Two or three technical strengths most aligned with the JD (use exact JD keywords).
+  3. One powerful, quantified career highlight from the original CV (numbers required).
+
+### experiences — STAR Method + Information Filtering
+- List all positions from the original CV in reverse chronological order.
+- For each position, rewrite bullets using STAR (Situation → Task → Action → Result).
+- Begin each bullet with a strong past-tense action verb.
+- Quantify results wherever evidence exists.
+- **Information Filtering (CRITICAL):** If a role is significantly irrelevant to the target JD
+  (e.g., a "Tutor" or "Barista" role for a Software Engineering position), do NOT omit it entirely
+  — that creates unexplained gaps. Instead:
+  a. Keep the company, role, and dates intact (recruiters verify employment history).
+  b. Reduce the bullets to 1–2 concise lines that highlight any transferable skills
+     (e.g., "Developed lesson plans for 12 students, demonstrating structured communication
+     skills valued in cross-functional engineering teams.").
+  c. Add a brief note in the `role` field suffix: append " [Summarised — non-core role]".
+
+### education
+- Preserve ALL education entries exactly from the original CV — institution, degree, major,
+  dates, location, GPA, honours. Do NOT alter any field.
+
+### projects — Gallery Injection (CRITICAL)
+**Case A: `selected_projects_data` contains one or more projects.**
+- REPLACE the projects section entirely with the provided gallery projects.
+- Do NOT include projects from the original CV that are NOT in the selected list.
+- For each gallery project, write STAR-format description bullets:
+  - Bullet 1 (Situation/Task): What problem did this project solve? What was the scope?
+  - Bullet 2 (Action): What specific technical decisions and implementations did the candidate make?
+    Use technologies from the project's tech_stack.
+  - Bullet 3 (Result): What was the measurable or qualitative outcome?
+- Dates, tech_stack, and link are taken from the gallery project data.
+- role: use "Developer" as a default if not specified in the project data.
+
+**Case B: `selected_projects_data` is empty or all projects are unrelated (fit_score < 0.15).**
+- Set `projects` to an empty array [].
+- Populate `recommended_actions` with 3–5 highly specific, actionable project ideas:
+  - Each action must name concrete technologies from the JD.
+  - Each action must describe what the project demonstrates (e.g., "demonstrating
+    proficiency in microservices architecture and event-driven design").
+  - Format: "Build a [project name] using [tech1, tech2, tech3] to demonstrate [skill]."
+  - Example: "Build a real-time stock dashboard using React, WebSockets, and Redis to
+    demonstrate proficiency in live data streaming and frontend state management."
+
+### skill_groups
+- Group skills into categories (e.g. Programming Languages, Cloud & DevOps, Databases,
+  Frameworks & Libraries, Tools).
+- Reorder so JD-relevant skills appear first within each group and first among groups.
+- Include skills evidenced in the original CV or in the selected gallery projects.
+- Remove unsupported buzzword skills with no backing in experience or projects.
+
+### awards_certifications
+- Copy all awards and certifications from the original CV verbatim.
+- Do NOT add certifications from the JD requirements.
+
+Output the complete, submission-ready CV as a structured JSON object.
+All sections must be fully populated. The `recommended_actions` field must be populated
+ONLY in Case B above — leave it as an empty list [] in Case A.\
+"""
+
+# ---------------------------------------------------------------------------
+# Fallback Project Ranker — Server-Side WebWorker Equivalent
+# Produces: List[ClientAIResult] (up to 5, sorted by fit_score desc)
+# ---------------------------------------------------------------------------
+
+PROJECT_RANKER_SYSTEM_PROMPT: str = (
+    "You are a technical recruiter AI with deep expertise in software engineering role requirements. "
+    "Your task is to evaluate a candidate's projects against a job description and produce a "
+    "structured ranking with honest fit scores and concise reasoning. "
+    "You output ONLY structured JSON — no Markdown, no LaTeX, no explanation outside the JSON."
+)
+
+PROJECT_RANKER_HUMAN_PROMPT: str = """\
+## Job Description
+{jd_text}
+
+## Candidate's Project Gallery
+{projects_text}
+
+## Your Task
+For each project, compute a semantic fit score (0.0 to 1.0) that represents how well the
+project's technologies, problem domain, and complexity align with the requirements of the JD.
+
+Scoring guidance:
+- 0.8–1.0: Direct technology match + same problem domain as JD.
+- 0.6–0.79: Strong technology overlap, adjacent domain.
+- 0.4–0.59: Partial technology overlap, transferable skills.
+- 0.2–0.39: Minimal overlap, some transferable concepts.
+- 0.0–0.19: Essentially unrelated.
+
+Return the Top 5 projects ranked by fit_score descending.
+For each project, write exactly one sentence of reasoning starting with "REASONING:" that explains
+specifically which JD requirement this project addresses.\
 """

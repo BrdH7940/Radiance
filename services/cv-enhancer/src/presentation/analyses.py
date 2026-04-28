@@ -21,9 +21,11 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from container import get_job_repository, get_sqs_service
+from container import get_job_repository, get_project_repository, get_sqs_service
 from core.domain.analysis_job import AnalysisJob, AnalysisResult, JobStatus
+from core.domain.gallery_schemas import ClientAIResult, EnhanceFromGalleryRequest, ProjectItem
 from core.ports.job_repository_port import IJobRepository
+from core.ports.project_repository_port import IProjectRepository
 from core.ports.sqs_port import ISQSService
 from presentation.dependencies.auth import get_current_user_id
 from presentation.dependencies.rate_limiter import check_analysis_rate_limit
@@ -220,3 +222,71 @@ async def get_analysis_status(
         error=job.error,
         result=result_dto,
     )
+
+
+@router.post(
+    "/enhance-from-gallery",
+    response_model=CreateAnalysisResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger Strategic Gallery-based CV enhancement",
+    description=(
+        "Receives client-side AI rankings, re-verifies all project IDs against Supabase "
+        "(security validation), then enqueues a gallery enhancement job to SQS. "
+        "Returns 202 Accepted with a job ID. Poll GET /api/v1/analyses/{id} for results."
+    ),
+    responses={
+        403: {"description": "One or more project IDs are invalid or do not belong to the user."},
+    },
+)
+async def enhance_from_gallery(
+    payload: EnhanceFromGalleryRequest,
+    user_id: str = Depends(get_current_user_id),
+    _rate_check: None = Depends(check_analysis_rate_limit),
+    sqs_service: ISQSService = Depends(get_sqs_service),
+    job_repo: IJobRepository = Depends(get_job_repository),
+    project_repo: IProjectRepository = Depends(get_project_repository),
+) -> CreateAnalysisResponse:
+    """Security-validate selected projects, then queue a strategic enhancement job."""
+
+    selected_ids = [r.project_id for r in payload.client_results]
+
+    # ── Security: re-fetch projects from Supabase — never trust the frontend payload ──
+    try:
+        verified_projects = await project_repo.verify_selected(user_id, selected_ids)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+
+    # Build trusted project dicts for the SQS message (from source-of-truth only)
+    trusted_project_dicts = [
+        ProjectItem.from_project(p).model_dump() for p in verified_projects
+    ]
+
+    job_id = uuid4().hex
+    job = AnalysisJob(
+        id=job_id,
+        user_id=user_id,
+        status=JobStatus.QUEUED,
+        s3_key="",
+        jd_text=payload.jd_text,
+        created_at=datetime.now(tz=timezone.utc),
+        updated_at=datetime.now(tz=timezone.utc),
+    )
+    await job_repo.save(job)
+
+    sqs_service.send_gallery_job(
+        job_id=job_id,
+        cv_text=payload.cv_text,
+        jd_text=payload.jd_text,
+        verified_projects=trusted_project_dicts,
+    )
+
+    logger.info(
+        "Gallery enhancement job '%s' queued for user '%s' with %d verified projects.",
+        job_id,
+        user_id,
+        len(verified_projects),
+    )
+    return CreateAnalysisResponse(id=job_id, status=JobStatus.QUEUED)

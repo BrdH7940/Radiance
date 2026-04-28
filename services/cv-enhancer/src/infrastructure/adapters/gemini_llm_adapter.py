@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from core.domain.analysis_job import RedFlag
 from core.domain.cv_resume_schema import CVResumeSchema
+from core.domain.gallery_schemas import ClientAIResult, ProjectItem
 from core.domain.skill_gap import SkillGap
 from core.ports.llm_port import FullAnalysisOutput, ILLMService
 from core.prompts.cv_analysis_prompt import (
@@ -25,6 +26,10 @@ from core.prompts.cv_analysis_prompt import (
     ANALYZER_SYSTEM_PROMPT,
     ENHANCER_HUMAN_PROMPT,
     ENHANCER_SYSTEM_PROMPT,
+    PROJECT_RANKER_HUMAN_PROMPT,
+    PROJECT_RANKER_SYSTEM_PROMPT,
+    STRATEGIC_ENHANCER_HUMAN_PROMPT,
+    STRATEGIC_ENHANCER_SYSTEM_PROMPT,
 )
 
 logger = logging.getLogger(__name__)
@@ -199,3 +204,96 @@ class GeminiLLMAdapter(ILLMService):
             red_flags=[RedFlag(**rf) for rf in final_state["red_flags"]],
             enhanced_cv_json=CVResumeSchema.model_validate(final_state["enhanced_cv_json"]),
         )
+
+    async def enhance_from_gallery(
+        self,
+        cv_text: str,
+        jd_text: str,
+        verified_projects: List[ProjectItem],
+    ) -> CVResumeSchema:
+        """Strategic enhancement using verified gallery projects.
+
+        Uses STRATEGIC_ENHANCER_PROMPT — a single-node pipeline (no Analyzer step).
+        When `verified_projects` is empty, populates `recommended_actions` instead
+        of hallucinating project content.
+        """
+        if verified_projects:
+            projects_text = "\n\n".join(
+                f"Project {i + 1}: {p.title}\n"
+                f"  Description: {p.description or 'N/A'}\n"
+                f"  Technologies: {', '.join(p.tech_stack)}"
+                for i, p in enumerate(verified_projects)
+            )
+        else:
+            projects_text = "EMPTY — no projects selected. Generate recommended_actions instead."
+
+        strategic_chain = (
+            ChatPromptTemplate.from_messages(
+                [
+                    ("system", STRATEGIC_ENHANCER_SYSTEM_PROMPT),
+                    ("human", STRATEGIC_ENHANCER_HUMAN_PROMPT),
+                ]
+            )
+            | self._llm.with_structured_output(CVResumeSchema)
+        )
+
+        logger.info(
+            "Strategic enhancer: invoking Gemini with %d gallery projects.",
+            len(verified_projects),
+        )
+        result: CVResumeSchema = await strategic_chain.ainvoke(
+            {
+                "cv_text": cv_text,
+                "jd_text": jd_text,
+                "selected_projects_text": projects_text,
+            }
+        )
+        logger.info(
+            "Strategic enhancer: produced CV for '%s' (recommended_actions: %d).",
+            result.personal_info.name,
+            len(result.recommended_actions),
+        )
+        return result
+
+    async def rank_projects_for_jd(
+        self,
+        jd_text: str,
+        projects: List[ProjectItem],
+    ) -> List[ClientAIResult]:
+        """Rank projects against a JD — server-side fallback for the WebWorker.
+
+        Returns up to 5 ClientAIResult objects sorted by fit_score descending.
+        """
+
+        class _RankerOutput(BaseModel):
+            results: List[ClientAIResult]
+
+        projects_text = "\n\n".join(
+            f"Project ID: {p.id}\n"
+            f"  Title: {p.title}\n"
+            f"  Description: {p.description or 'N/A'}\n"
+            f"  Technologies: {', '.join(p.tech_stack)}"
+            for p in projects
+        )
+
+        ranker_chain = (
+            ChatPromptTemplate.from_messages(
+                [
+                    ("system", PROJECT_RANKER_SYSTEM_PROMPT),
+                    ("human", PROJECT_RANKER_HUMAN_PROMPT),
+                ]
+            )
+            | self._llm.with_structured_output(_RankerOutput)
+        )
+
+        logger.info(
+            "Project ranker fallback: ranking %d projects against JD.", len(projects)
+        )
+        output: _RankerOutput = await ranker_chain.ainvoke(
+            {"jd_text": jd_text, "projects_text": projects_text}
+        )
+
+        # Sort by fit_score descending and cap at 5
+        ranked = sorted(output.results, key=lambda r: r.fit_score, reverse=True)[:5]
+        logger.info("Project ranker fallback: returned %d results.", len(ranked))
+        return ranked

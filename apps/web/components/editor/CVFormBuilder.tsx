@@ -26,6 +26,8 @@ import type { CVResumeSchema, CVExperience, CVEducation, CVProject, CVSkillGroup
 interface CVFormBuilderProps {
     cvData: CVResumeSchema
     onChange: (updated: CVResumeSchema) => void
+    /** Indices of projects injected from the Gallery (show "AI Recommended" badge). */
+    aiRecommendedProjectIndices?: number[]
 }
 
 // ─── Shared UI primitives ─────────────────────────────────────────────────────
@@ -133,7 +135,7 @@ function Textarea({
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export function CVFormBuilder({ cvData, onChange }: CVFormBuilderProps) {
+export function CVFormBuilder({ cvData, onChange, aiRecommendedProjectIndices = [] }: CVFormBuilderProps) {
     const [expanded, setExpanded] = useState<Record<string, boolean>>({
         personal: true,
         summary: true,
@@ -523,9 +525,16 @@ export function CVFormBuilder({ cvData, onChange }: CVFormBuilderProps) {
                         {cvData.projects.map((proj, pi) => (
                             <div key={pi} className="p-3 flex flex-col gap-3">
                                 <div className="flex items-center justify-between">
-                                    <span className="text-xs font-semibold text-[#4B5563]">
-                                        {proj.name || `Project ${pi + 1}`}
-                                    </span>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs font-semibold text-[#4B5563]">
+                                            {proj.name || `Project ${pi + 1}`}
+                                        </span>
+                                        {aiRecommendedProjectIndices.includes(pi) && (
+                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold bg-[#FDC800] border border-black rounded-sm leading-none">
+                                                ✨ AI
+                                            </span>
+                                        )}
+                                    </div>
                                     <button
                                         type="button"
                                         onClick={() => removeProj(pi)}

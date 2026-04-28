@@ -46,3 +46,23 @@ class IProjectRepository(ABC):
             True if a record was updated, False if not found.
         """
         ...
+
+    @abstractmethod
+    async def verify_selected(self, user_id: str, selected_ids: List[str]) -> List[Project]:
+        """Verify that all selected_ids belong to the user and are active.
+
+        Fetches the source-of-truth from the database.  Any ID that does not
+        exist or does not belong to user_id causes a ValueError to be raised,
+        which the presentation layer converts to a 403 Forbidden response.
+
+        Args:
+            user_id: Owning user's UUID string.
+            selected_ids: Project UUIDs as strings from the frontend payload.
+
+        Returns:
+            List of verified Project domain objects — safe to pass to the LLM.
+
+        Raises:
+            ValueError: If any ID is invalid or does not belong to user_id.
+        """
+        ...

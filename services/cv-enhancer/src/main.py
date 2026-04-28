@@ -16,6 +16,7 @@ from config import cors_allowed_origins_from_env
 
 from presentation.analyses import router as analyses_router
 from presentation.editor import router as editor_router
+from presentation.fallback import router as fallback_router
 from presentation.history import router as history_router
 from presentation.projects import router as projects_router
 from presentation.resumes import router as resumes_router
@@ -98,7 +99,8 @@ except Exception:
 
 # ── Routers ──────────────────────────────────────────────────────────────────
 app.include_router(resumes_router)   # POST   /api/v1/resumes/upload-urls
-app.include_router(analyses_router)  # POST   /api/v1/analyses  |  GET /api/v1/analyses/{id}
+app.include_router(analyses_router)  # POST   /api/v1/analyses  |  POST /api/v1/analyses/enhance-from-gallery  |  GET /api/v1/analyses/{id}
+app.include_router(fallback_router)  # POST   /api/v1/fallback/client-ai
 app.include_router(editor_router)    # POST   /api/v1/editor/renders
 app.include_router(projects_router)  # CRUD   /api/v1/projects
 app.include_router(history_router)   # GET    /api/v1/history  |  /history/{id}
@@ -123,8 +125,78 @@ async def health_check() -> dict:
 mangum_handler = Mangum(app, lifespan="on")
 
 
+async def _process_legacy_record(body: dict, use_case) -> None:
+    """Run the legacy S3-based CV enhancement pipeline."""
+    job_id = body.get("job_id")
+    s3_key = body.get("s3_key")
+    jd_text = body.get("jd_text")
+    logger.info("Worker processing legacy Job ID: %s", job_id)
+
+    try:
+        from observability.xray import annotate_kv, with_subsegment
+        annotate_kv("event_source", "sqs")
+        annotate_kv("job_id", job_id)
+        annotate_kv("s3_key", s3_key)
+        with with_subsegment("sqs_legacy_record"):
+            await use_case.execute(job_id=job_id, s3_key=s3_key, jd_text=jd_text)
+    except Exception:
+        await use_case.execute(job_id=job_id, s3_key=s3_key, jd_text=jd_text)
+
+
+async def _process_gallery_record(body: dict) -> None:
+    """Run the Strategic Gallery enhancement pipeline."""
+    from container import get_job_repository, get_llm_service
+    from core.domain.gallery_schemas import ProjectItem
+    from datetime import datetime, timezone
+    from core.domain.analysis_job import AnalysisResult, JobStatus
+
+    job_id = body.get("job_id")
+    cv_text = body.get("cv_text", "")
+    jd_text = body.get("jd_text", "")
+    raw_projects = body.get("verified_projects", [])
+
+    logger.info("Worker processing gallery Job ID: %s (%d projects)", job_id, len(raw_projects))
+
+    job_repo = get_job_repository()
+    llm_service = get_llm_service()
+
+    projects = [ProjectItem(**p) for p in raw_projects]
+
+    job = await job_repo.get(job_id)
+    if job is None:
+        logger.error("Gallery job '%s' not found in job store — skipping.", job_id)
+        return
+
+    try:
+        enhanced_cv = await llm_service.enhance_from_gallery(
+            cv_text=cv_text,
+            jd_text=jd_text,
+            verified_projects=projects,
+        )
+
+        # Gallery jobs do not produce a matching_score/missing_skills/red_flags
+        # in the legacy sense; use neutral defaults so the polling DTO is valid.
+        result = AnalysisResult(
+            matching_score=0,
+            missing_skills=[],
+            red_flags=[],
+            enhanced_cv_json=enhanced_cv,
+            pdf_url="",
+        )
+        job.status = JobStatus.COMPLETED
+        job.result = result
+        job.updated_at = datetime.now(tz=timezone.utc)
+    except Exception as exc:
+        logger.error("Gallery job '%s' failed: %s", job_id, exc, exc_info=True)
+        job.status = JobStatus.FAILED
+        job.error = str(exc)
+        job.updated_at = datetime.now(tz=timezone.utc)
+
+    await job_repo.update(job)
+
+
 async def process_sqs_records(event: dict) -> None:
-    """Xử lý danh sách các tin nhắn từ SQS."""
+    """Dispatch SQS records to the appropriate pipeline based on message type."""
     from container import get_analyze_cv_use_case
 
     use_case = get_analyze_cv_use_case()
@@ -132,38 +204,19 @@ async def process_sqs_records(event: dict) -> None:
     for record in event.get("Records", []):
         try:
             body = json.loads(record["body"])
-            job_id = body.get("job_id")
-            s3_key = body.get("s3_key")
-            jd_text = body.get("jd_text")
+            msg_type = body.get("type", "legacy_enhance")
 
-            logger.info("Worker processing Job ID: %s", job_id)
+            if msg_type == "gallery_enhance":
+                await _process_gallery_record(body)
+            else:
+                await _process_legacy_record(body, use_case)
 
-            # Best-effort X-Ray subsegment per record/job.
-            try:
-                from observability.xray import annotate_kv, with_subsegment
-
-                annotate_kv("event_source", "sqs")
-                annotate_kv("job_id", job_id)
-                annotate_kv("s3_key", s3_key)
-                with with_subsegment("sqs_record"):
-                    await use_case.execute(
-                        job_id=job_id,
-                        s3_key=s3_key,
-                        jd_text=jd_text,
-                    )
-            except Exception:
-                await use_case.execute(
-                    job_id=job_id,
-                    s3_key=s3_key,
-                    jd_text=jd_text,
-                )
-
-            logger.info("Successfully processed Job ID: %s", job_id)
+            logger.info("Successfully processed SQS record (type: %s).", msg_type)
         except Exception as exc:  # noqa: BLE001
             logger.error(
                 "Error processing SQS record: %s", str(exc), exc_info=True
             )
-            # Ném exception để SQS hiểu là fail và tự retry theo policy.
+            # Re-raise so SQS retries according to the queue's redrive policy.
             raise
 
 
