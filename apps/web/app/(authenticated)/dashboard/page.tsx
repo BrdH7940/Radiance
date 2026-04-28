@@ -38,7 +38,6 @@ export default function EnhanceCVPage() {
         phase,
         inputReviewMode,
         analysisResult,
-        authHydrated,
         galleryPhase,
         galleryLoadingStep,
         projectGallery,
@@ -66,14 +65,11 @@ export default function EnhanceCVPage() {
     const isAnalyzing = phase === 'analyzing'
     const isGalleryAnalyzing = galleryPhase === 'ANALYZING'
 
-    // ── Load project gallery — ONLY after auth is fully settled ──────────────
-    // Gating on `authHydrated` serialises this fetch AFTER SupabaseAuthListener
-    // has finished getUser() + onAuthStateChange setup. Without this gate,
-    // getProjects() → getSession() runs concurrently with the auth lock held by
-    // the listener, causing the NavigatorLock timeout / stolen-lock error.
+    // ── Load project gallery once on mount ────────────────────────────────────
+    // Uses the existing projectApi.getProjects() so auth goes through the same
+    // Supabase client instance — no extra getSession() calls, no lock contention.
     // The ref guard prevents the double-invocation from React Strict Mode (dev).
     useEffect(() => {
-        if (!authHydrated) return
         if (galleryFetchedRef.current || projectGallery.length > 0) return
         galleryFetchedRef.current = true
 
@@ -89,11 +85,11 @@ export default function EnhanceCVPage() {
             })
             .catch(() => {
                 // Non-fatal: gallery is optional for the legacy flow.
-                // Reset flag so the user can retry on next navigation.
+                // Reset flag so the user can retry by navigating back.
                 galleryFetchedRef.current = false
             })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [authHydrated])
+    }, [])
 
     // ── Poll for gallery job completion ────────────────────────────────────────
     useEffect(() => {
