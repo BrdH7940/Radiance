@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
     AlertCircle,
@@ -19,6 +19,7 @@ import { ProjectSelectionHub } from '@/components/dashboard/ProjectSelectionHub'
 import { useCVStore } from '@/store/useCVStore'
 import { uploadAndAnalyze, AnalysisService } from '@/services/api'
 import type { ProjectItem } from '@/services/api'
+import { getProjects } from '@/services/projectApi'
 import { analyzeProjectsWithClientAI, type OnProgressCallback } from '@/services/aiClientService'
 
 const MIN_JD_LENGTH = 50
@@ -57,46 +58,38 @@ export default function EnhanceCVPage() {
 
     const [validationError, setValidationError] = useState<string | null>(null)
     const [galleryJobId, setGalleryJobId] = useState<string | null>(null)
+    // Prevents the gallery fetch from running twice in React Strict Mode.
+    const galleryFetchedRef = useRef(false)
 
     const canAnalyze = !!cvFile && jdText.trim().length >= MIN_JD_LENGTH
     const isAnalyzing = phase === 'analyzing'
     const isGalleryAnalyzing = galleryPhase === 'ANALYZING'
 
     // ── Load project gallery once on mount ────────────────────────────────────
+    // Uses the existing projectApi.getProjects() so auth goes through the same
+    // Supabase client instance — no extra getSession() calls, no lock contention.
+    // The ref guard prevents the double-invocation from React Strict Mode (dev).
     useEffect(() => {
-        if (projectGallery.length > 0) return
+        if (galleryFetchedRef.current || projectGallery.length > 0) return
+        galleryFetchedRef.current = true
 
-        const loadGallery = async () => {
-            try {
-                const { getSupabaseToken } = await import('@/services/api')
-                const token = await getSupabaseToken()
-                if (!token) return
-
-                const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
-                const res = await fetch(`${API_BASE}/api/v1/projects`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                })
-                if (!res.ok) return
-
-                const data = (await res.json()) as Array<{
-                    id: string
-                    title: string
-                    description: string | null
-                    technologies: string[]
-                }>
-                const items: ProjectItem[] = data.map((p) => ({
+        getProjects()
+            .then((projects) => {
+                const items: ProjectItem[] = projects.map((p) => ({
                     id: p.id,
                     title: p.title,
                     description: p.description,
                     tech_stack: p.technologies,
                 }))
                 setProjectGallery(items)
-            } catch {
-                // Non-fatal: gallery is optional for the legacy flow
-            }
-        }
-        void loadGallery()
-    }, [projectGallery.length, setProjectGallery])
+            })
+            .catch(() => {
+                // Non-fatal: gallery is optional for the legacy flow.
+                // Reset flag so the user can retry by navigating back.
+                galleryFetchedRef.current = false
+            })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
     // ── Poll for gallery job completion ────────────────────────────────────────
     useEffect(() => {
