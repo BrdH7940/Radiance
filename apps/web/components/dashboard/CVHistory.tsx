@@ -4,9 +4,7 @@ import { useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { History, AlertCircle, ChevronRight, Building2, Briefcase } from 'lucide-react'
 import { useState } from 'react'
-import { type CVHistoryEntry, type CVHistorySummary, getHistory, getHistoryItem } from '@/services/historyApi'
-import { useCVStore } from '@/store/useCVStore'
-import type { CVResumeSchema } from '@/services/api'
+import { type CVHistorySummary, getHistory } from '@/services/historyApi'
 
 // ─── Score badge ──────────────────────────────────────────────────────────────
 
@@ -33,10 +31,9 @@ function ScoreBadge({ score }: { score: number | null }) {
 interface HistoryCardProps {
     entry: CVHistorySummary
     onOpen: (id: string) => void
-    loading: boolean
 }
 
-function HistoryCard({ entry, onOpen, loading }: HistoryCardProps) {
+function HistoryCard({ entry, onOpen }: HistoryCardProps) {
     const date = new Date(entry.created_at).toLocaleDateString('en-US', {
         month: 'short',
         day: 'numeric',
@@ -47,8 +44,7 @@ function HistoryCard({ entry, onOpen, loading }: HistoryCardProps) {
         <button
             type="button"
             onClick={() => onOpen(entry.id)}
-            disabled={loading}
-            className="w-full text-left group rounded-none border-4 border-black bg-[#FBFBF9] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[4px] hover:translate-y-[4px] p-5 transition-all duration-200 disabled:opacity-60"
+            className="w-full text-left group rounded-none border-4 border-black bg-[#FBFBF9] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[4px] hover:translate-y-[4px] p-5 transition-all duration-200"
         >
             <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
@@ -90,11 +86,9 @@ function HistoryCard({ entry, onOpen, loading }: HistoryCardProps) {
 
 export function CVHistory() {
     const router = useRouter()
-    const { setCvData, setPdfUrl, setPhase, setAnalysisResult } = useCVStore()
 
     const [history, setHistory] = useState<CVHistorySummary[]>([])
     const [loading, setLoading] = useState(true)
-    const [openingId, setOpeningId] = useState<string | null>(null)
     const [error, setError] = useState<string | null>(null)
 
     const fetchHistory = useCallback(async () => {
@@ -115,39 +109,10 @@ export function CVHistory() {
     }, [fetchHistory])
 
     const handleOpen = useCallback(
-        async (id: string) => {
-            setOpeningId(id)
-            try {
-                const entry: CVHistoryEntry = await getHistoryItem(id)
-
-                if (entry.enhanced_cv_json) {
-                    const cvData = entry.enhanced_cv_json as CVResumeSchema
-
-                    // Restore workspace state from the history entry.
-                    setCvData(cvData)
-                    setPdfUrl('')
-
-                    // Restore a minimal analysisResult so the dashboard phase renders.
-                    setAnalysisResult({
-                        matching_score: entry.matching_score ?? 0,
-                        missing_skills: [],
-                        red_flags: [],
-                        enhanced_cv_json: cvData,
-                        pdf_url: '',
-                    })
-
-                    setPhase('workspace')
-                    router.push('/workspace')
-                }
-            } catch (err: unknown) {
-                setError(
-                    err instanceof Error ? err.message : 'Failed to open history entry.'
-                )
-            } finally {
-                setOpeningId(null)
-            }
+        (id: string) => {
+            router.push(`/dashboard/history?id=${id}`)
         },
-        [setCvData, setPdfUrl, setAnalysisResult, setPhase, router]
+        [router]
     )
 
     return (
@@ -207,7 +172,6 @@ export function CVHistory() {
                             key={entry.id}
                             entry={entry}
                             onOpen={handleOpen}
-                            loading={openingId === entry.id}
                         />
                     ))}
                 </div>

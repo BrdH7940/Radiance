@@ -7,6 +7,8 @@ TESTING_GUIDE_RUN.md
 _terraform.yml
 fetch/
 eval/
+scripts/
+LOCAL_DEV_BACKEND.md
 
 # dependencies
 /node_modules

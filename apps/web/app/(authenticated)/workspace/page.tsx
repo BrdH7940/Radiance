@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useRef, useCallback, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useRef, useCallback, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
     Download,
     FileJson,
@@ -31,9 +31,19 @@ interface Notification {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function WorkspacePage() {
+function WorkspacePageInner() {
     const router = useRouter()
-    const { cvData, setCvData, pdfUrl, setPdfUrl, setPhase, setInputReviewMode } = useCVStore()
+    const searchParams = useSearchParams()
+    const historyId = searchParams.get('id')
+
+    const {
+        cvData,
+        setCvData,
+        pdfUrl,
+        setPdfUrl,
+        setPhase,
+        setInputReviewMode,
+    } = useCVStore()
 
     const [isRendering, setIsRendering] = useState(false)
     const [notifications, setNotifications] = useState<Notification[]>([])
@@ -56,7 +66,8 @@ export default function WorkspacePage() {
             const id = ++notifIdRef.current
             setNotifications((prev) => [...prev, { id, message, type }])
             setTimeout(
-                () => setNotifications((prev) => prev.filter((n) => n.id !== id)),
+                () =>
+                    setNotifications((prev) => prev.filter((n) => n.id !== id)),
                 3500
             )
         },
@@ -125,7 +136,9 @@ export default function WorkspacePage() {
 
     const handleDownloadJson = useCallback(() => {
         if (!cvData) return
-        const blob = new Blob([JSON.stringify(cvData, null, 2)], { type: 'application/json' })
+        const blob = new Blob([JSON.stringify(cvData, null, 2)], {
+            type: 'application/json',
+        })
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
@@ -145,12 +158,27 @@ export default function WorkspacePage() {
             a.click()
             showNotification('PDF download started.', 'info')
         } else {
-            showNotification('Render the PDF first using the "Render PDF" button.', 'error')
+            showNotification(
+                'Render the PDF first using the "Render PDF" button.',
+                'error'
+            )
         }
     }, [pdfUrl, showNotification])
 
     const handleStepClick = useCallback(
         (step: number) => {
+            if (historyId) {
+                if (step === 1) {
+                    router.push('/dashboard/history')
+                    return
+                }
+                if (step === 2) {
+                    router.push(`/dashboard/history?id=${historyId}`)
+                    return
+                }
+                return
+            }
+
             if (step === 1) {
                 setInputReviewMode(true)
                 setPhase('upload')
@@ -165,7 +193,7 @@ export default function WorkspacePage() {
                 return
             }
         },
-        [router, setInputReviewMode, setPhase]
+        [historyId, router, setInputReviewMode, setPhase]
     )
 
     // ── Render ────────────────────────────────────────────────────────────────
@@ -179,11 +207,15 @@ export default function WorkspacePage() {
             {/* ── Toolbar ──────────────────────────────────────────────────────── */}
             <div className="shrink-0 flex items-center gap-3 px-5 py-2.5 border-b-4 border-black bg-[#FBFBF9]">
                 <button
-                    onClick={() => router.push('/')}
+                    onClick={() =>
+                        historyId
+                            ? router.push('/dashboard/history')
+                            : router.push('/dashboard')
+                    }
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-none border-4 border-black bg-[#FBFBF9] text-[#1C293C] text-xs font-medium hover:bg-[#FDC800] transition-all duration-200 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[3px] hover:translate-y-[3px]"
                 >
                     <ChevronLeft className="w-3.5 h-3.5" />
-                    Upload
+                    {historyId ? 'History' : 'Upload'}
                 </button>
 
                 <div className="h-4 w-px bg-black/20" />
@@ -202,7 +234,9 @@ export default function WorkspacePage() {
                         disabled={isRendering}
                         className="flex items-center gap-1.5 px-4 py-1.5 rounded-none text-xs font-semibold border-4 border-black bg-[#FDC800] text-[#1C293C] hover:bg-[#FDC800] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[3px] hover:translate-y-[3px]"
                     >
-                        <RefreshCw className={`w-3.5 h-3.5 ${isRendering ? 'animate-spin' : ''}`} />
+                        <RefreshCw
+                            className={`w-3.5 h-3.5 ${isRendering ? 'animate-spin' : ''}`}
+                        />
                         {isRendering ? 'Rendering…' : 'Render PDF'}
                     </button>
 
@@ -227,23 +261,33 @@ export default function WorkspacePage() {
                     {/* AI indicator */}
                     <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-none border-4 border-black bg-[#16A34A]">
                         <Zap className="w-3 h-3 text-white" strokeWidth={2.5} />
-                        <span className="text-xs text-white font-medium">Editor Active</span>
+                        <span className="text-xs text-white font-medium">
+                            Editor Active
+                        </span>
                     </div>
                 </div>
             </div>
 
             {/* ── Split pane ──────────────────────────────────────────────────── */}
-            <div ref={splitPaneRef} className="flex-1 flex overflow-hidden min-h-0">
+            <div
+                ref={splitPaneRef}
+                className="flex-1 flex overflow-hidden min-h-0"
+            >
                 {/* Left — Form Builder */}
                 <div
                     className="flex flex-col border-r-4 border-black min-w-0 flex-none bg-[#FBFBF9]"
                     style={{ width: `${leftPaneWidth}%` }}
                 >
                     <div className="shrink-0 flex items-center px-4 py-2 border-b-4 border-black bg-[#FBFBF9]">
-                        <span className="text-sm text-[#1C293C] font-medium">Edit CV</span>
+                        <span className="text-sm text-[#1C293C] font-medium">
+                            Edit CV
+                        </span>
                     </div>
                     <div className="flex-1 min-h-0 overflow-hidden">
-                        <CVFormBuilder cvData={cvData} onChange={handleCvChange} />
+                        <CVFormBuilder
+                            cvData={cvData}
+                            onChange={handleCvChange}
+                        />
                     </div>
                 </div>
 
@@ -255,7 +299,11 @@ export default function WorkspacePage() {
 
                 {/* Right — Preview */}
                 <div className="flex-1 flex flex-col min-w-0">
-                    <CVPreview cvData={cvData} pdfUrl={pdfUrl} isRendering={isRendering} />
+                    <CVPreview
+                        cvData={cvData}
+                        pdfUrl={pdfUrl}
+                        isRendering={isRendering}
+                    />
                 </div>
             </div>
 
@@ -284,5 +332,13 @@ export default function WorkspacePage() {
                 ))}
             </div>
         </div>
+    )
+}
+
+export default function WorkspacePage() {
+    return (
+        <Suspense>
+            <WorkspacePageInner />
+        </Suspense>
     )
 }
