@@ -35,7 +35,9 @@ from core.ports.sqs_port import ISQSService
 from core.ports.storage_port import IStorageService
 from core.use_cases.analyze_cv_use_case import AnalyzeCVUseCase
 from infrastructure.adapters.dynamo_job_repository import DynamoJobRepository
+from infrastructure.adapters.fallback_llm_adapter import FallbackLLMAdapter
 from infrastructure.adapters.gemini_llm_adapter import GeminiLLMAdapter
+from infrastructure.adapters.groq_llm_adapter import GroqLLMAdapter
 from infrastructure.adapters.supabase_client import get_supabase_client
 from infrastructure.adapters.supabase_history_repository import SupabaseHistoryRepository
 from infrastructure.adapters.supabase_project_repository import SupabaseProjectRepository
@@ -81,13 +83,37 @@ def get_document_parser() -> IDocumentParser:
 
 @lru_cache(maxsize=1)
 def get_llm_service() -> ILLMService:
-    """Singleton GeminiLLMAdapter (Analyzer → Enhancer LangGraph graph)."""
+    """Return the LLM service, optionally wrapped with a Groq fallback.
+
+    When GROQ_API_KEY is set in the environment, requests are first tried on
+    Gemini. If Gemini raises any exception (429, 503, timeout, etc.),
+    FallbackLLMAdapter transparently retries the same call on Groq so the
+    analysis job still completes successfully.
+
+    When GROQ_API_KEY is absent, behaviour is identical to the previous
+    single-adapter setup.
+    """
     settings: AppSettings = get_settings()
     logger.info("Initialising GeminiLLMAdapter (model: '%s')…", settings.gemini_model)
-    return GeminiLLMAdapter(
+    gemini = GeminiLLMAdapter(
         api_key=settings.google_api_key,
         model=settings.gemini_model,
     )
+
+    if settings.groq_api_key:
+        logger.info(
+            "Groq fallback enabled — GroqLLMAdapter (model: '%s') will be used "
+            "when Gemini is unavailable.",
+            settings.groq_model,
+        )
+        groq = GroqLLMAdapter(
+            api_key=settings.groq_api_key,
+            model=settings.groq_model,
+        )
+        return FallbackLLMAdapter(primary=gemini, fallback=groq)
+
+    logger.info("Groq fallback not configured (GROQ_API_KEY not set). Using Gemini only.")
+    return gemini
 
 
 @lru_cache(maxsize=1)

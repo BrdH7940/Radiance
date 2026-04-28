@@ -40,9 +40,13 @@ class AppSettings(BaseSettings):
         populate_by_name=True,
     )
 
-    # ── AI ──────────────────────────────────────────────────────────────────────
+    # ── AI — Gemini (primary) ────────────────────────────────────────────────────
     google_api_key: str = Field(alias="GOOGLE_API_KEY")
-    gemini_model: str = Field(default="gemini-1.5-flash", alias="GEMINI_MODEL")
+    gemini_model: str = Field(default="gemini-2.5-flash", alias="GEMINI_MODEL")
+
+    # ── AI — Groq (fallback, optional) ───────────────────────────────────────────
+    groq_api_key: Optional[str] = Field(default=None, alias="GROQ_API_KEY")
+    groq_model: str = Field(default="openai/gpt-oss-120b", alias="GROQ_MODEL")
 
     # ── AWS credentials ─────────────────────────────────────────────────────────
     aws_region: str = Field(alias="AWS_REGION")
