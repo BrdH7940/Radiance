@@ -1,3 +1,4 @@
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -5,6 +6,11 @@ import pytest
 from botocore.exceptions import ClientError
 
 from infrastructure.storage.s3_storage import S3StorageAdapter
+
+MOCK_DOWNLOADED_CV_PATH = str(Path("tmp") / "cv.pdf")
+MOCK_MISSING_CV_PATH = str(Path("tmp") / "missing.pdf")
+MOCK_SECRET_CV_PATH = str(Path("tmp") / "secret.pdf")
+MOCK_RENDERED_PDF_PATH = str(Path("tmp") / "rendered.pdf")
 
 
 @pytest.fixture
@@ -106,12 +112,12 @@ def test_download_object_success(settings, monkeypatch):
     )
     adapter = S3StorageAdapter(settings)
 
-    adapter.download_object("raw-pdf/cv.pdf", "/tmp/cv.pdf")
+    adapter.download_object("raw-pdf/cv.pdf", MOCK_DOWNLOADED_CV_PATH)
 
     client_mock.download_file.assert_called_once_with(
         Bucket="radiance-bucket",
         Key="raw-pdf/cv.pdf",
-        Filename="/tmp/cv.pdf",
+        Filename=MOCK_DOWNLOADED_CV_PATH,
     )
 
 
@@ -125,7 +131,7 @@ def test_download_object_maps_missing_key_to_file_not_found(settings, monkeypatc
     adapter = S3StorageAdapter(settings)
 
     with pytest.raises(FileNotFoundError):
-        adapter.download_object("raw-pdf/missing.pdf", "/tmp/missing.pdf")
+        adapter.download_object("raw-pdf/missing.pdf", MOCK_MISSING_CV_PATH)
 
 
 def test_download_object_reraises_non_missing_client_error(settings, monkeypatch):
@@ -137,7 +143,7 @@ def test_download_object_reraises_non_missing_client_error(settings, monkeypatch
     adapter = S3StorageAdapter(settings)
 
     with pytest.raises(ClientError):
-        adapter.download_object("raw-pdf/secret.pdf", "/tmp/secret.pdf")
+        adapter.download_object("raw-pdf/secret.pdf", MOCK_SECRET_CV_PATH)
 
 
 def test_upload_file_uses_content_type_and_returns_key(settings, monkeypatch):
@@ -148,14 +154,14 @@ def test_upload_file_uses_content_type_and_returns_key(settings, monkeypatch):
     adapter = S3StorageAdapter(settings)
 
     returned_key = adapter.upload_file(
-        local_path="/tmp/rendered.pdf",
+        local_path=MOCK_RENDERED_PDF_PATH,
         object_key="enhanced-pdf/rendered.pdf",
         content_type="application/pdf",
     )
 
     assert returned_key == "enhanced-pdf/rendered.pdf"
     client_mock.upload_file.assert_called_once_with(
-        Filename="/tmp/rendered.pdf",
+        Filename=MOCK_RENDERED_PDF_PATH,
         Bucket="radiance-bucket",
         Key="enhanced-pdf/rendered.pdf",
         ExtraArgs={"ContentType": "application/pdf"},

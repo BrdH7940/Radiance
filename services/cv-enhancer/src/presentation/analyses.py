@@ -22,8 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from container import get_job_repository, get_sqs_service
-from core.domain.analysis_job import AnalysisJob, AnalysisResult, JobStatus, RedFlag
-from core.domain.skill_gap import SkillGap
+from core.domain.analysis_job import AnalysisJob, AnalysisResult, JobStatus
 from core.ports.job_repository_port import IJobRepository
 from core.ports.sqs_port import ISQSService
 from presentation.dependencies.auth import get_current_user_id

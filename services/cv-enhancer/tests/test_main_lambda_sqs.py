@@ -27,18 +27,17 @@ async def test_process_sqs_records_calls_use_case_for_each_record(monkeypatch):
 
 def test_handler_routes_sqs_events_to_processor(monkeypatch):
     process_mock = AsyncMock(return_value=None)
-    loop_mock = MagicMock()
-    loop_mock.run_until_complete.return_value = None
+    run_mock = MagicMock(return_value=None)
 
     monkeypatch.setattr("main.process_sqs_records", process_mock)
-    monkeypatch.setattr("main.asyncio.get_event_loop", MagicMock(return_value=loop_mock))
+    monkeypatch.setattr("main.asyncio.run", run_mock)
 
     event = {"Records": [{"body": '{"job_id":"job-1","s3_key":"k","jd_text":"j"}'}]}
     context = MagicMock()
 
     main.handler(event, context)
 
-    loop_mock.run_until_complete.assert_called_once()
+    run_mock.assert_called_once()
     process_mock.assert_called_once_with(event)
 
 

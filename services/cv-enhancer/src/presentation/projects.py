@@ -10,7 +10,6 @@ DELETE /api/v1/projects/{project_id} — soft-delete a project (sets is_active=F
 All endpoints require a valid Supabase Bearer token.
 """
 
-import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -19,8 +18,6 @@ from container import get_project_repository
 from core.domain.project import CreateProjectRequest, Project
 from core.ports.project_repository_port import IProjectRepository
 from presentation.dependencies.auth import get_current_user_id
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/projects", tags=["Projects"])
 

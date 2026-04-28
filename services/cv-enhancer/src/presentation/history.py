@@ -9,7 +9,6 @@ GET /api/v1/history/{id}      — fetch the full enhancement record (includes JS
 All endpoints require a valid Supabase Bearer token.
 """
 
-import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -18,8 +17,6 @@ from container import get_history_repository
 from core.domain.cv_history import CVHistoryEntry, CVHistorySummary
 from core.ports.history_repository_port import IHistoryRepository
 from presentation.dependencies.auth import get_current_user_id
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/history", tags=["CV History"])
 
