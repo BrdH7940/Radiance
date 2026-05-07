@@ -14,6 +14,7 @@ GET /api/v1/analyses/{id}
 """
 
 import logging
+import asyncio
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
@@ -21,12 +22,19 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from container import get_job_repository, get_project_repository, get_sqs_service
+from config import get_settings
+from container import (
+    get_analyze_cv_use_case,
+    get_job_repository,
+    get_project_repository,
+    get_sqs_service,
+)
 from core.domain.analysis_job import AnalysisJob, AnalysisResult, JobStatus
 from core.domain.gallery_schemas import ClientAIResult, EnhanceFromGalleryRequest, ProjectItem
 from core.ports.job_repository_port import IJobRepository
 from core.ports.project_repository_port import IProjectRepository
 from core.ports.sqs_port import ISQSService
+from core.use_cases.analyze_cv_use_case import AnalyzeCVUseCase
 from presentation.dependencies.auth import get_current_user_id
 from presentation.dependencies.rate_limiter import check_analysis_rate_limit
 
@@ -128,6 +136,7 @@ async def create_analysis(
     _rate_check: None = Depends(check_analysis_rate_limit),
     sqs_service: ISQSService = Depends(get_sqs_service),
     job_repo: IJobRepository = Depends(get_job_repository),
+    use_case: AnalyzeCVUseCase = Depends(get_analyze_cv_use_case),
 ) -> CreateAnalysisResponse:
     """Queue a new CV analysis job and immediately return the job ID."""
 
@@ -146,7 +155,20 @@ async def create_analysis(
     )
     await job_repo.save(job)
 
-    sqs_service.send_job(job_id, payload.s3_key, payload.jd_text)
+    settings = get_settings()
+    if settings.in_process_worker:
+        # Local-dev convenience: process the job inside the running API process.
+        # The frontend still polls GET /api/v1/analyses/{id} the same way.
+        asyncio.create_task(
+            use_case.execute(job_id=job_id, s3_key=payload.s3_key, jd_text=payload.jd_text)
+        )
+        logger.info(
+            "Analysis job '%s' scheduled in-process for user '%s' (IN_PROCESS_WORKER=1).",
+            job_id,
+            user_id,
+        )
+    else:
+        sqs_service.send_job(job_id, payload.s3_key, payload.jd_text)
 
     logger.info(
         "Analysis job '%s' queued for user '%s', S3 key '%s'.",

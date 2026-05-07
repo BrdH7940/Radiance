@@ -81,6 +81,11 @@ class AppSettings(BaseSettings):
     supabase_service_role_key: str = Field(alias="SUPABASE_SERVICE_ROLE_KEY")
     supabase_jwt_secret: str = Field(alias="SUPABASE_JWT_SECRET")
 
+    # ── Local dev toggles ────────────────────────────────────────────────────
+    # When enabled, the HTTP API will process analysis jobs in-process (no SQS worker required).
+    # Intended for local development only.
+    in_process_worker: bool = Field(default=False, alias="IN_PROCESS_WORKER")
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> AppSettings:
