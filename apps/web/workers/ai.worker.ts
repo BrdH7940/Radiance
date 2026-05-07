@@ -67,19 +67,21 @@ self.onmessage = async (event: MessageEvent) => {
         // ── Phase 1: Embedding & Ranking ──────────────────────────────────────
         self.postMessage({ type: 'PROGRESS', step: 1 })
 
-        // Dynamic import so a load failure is catchable
-        const { pipeline, env } = await import(
-            // @ts-expect-error — Transformers.js v3 has no bundled types yet
-            'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3/dist/transformers.min.js'
-        )
+        // Dynamic import so a load failure is catchable.
+        // IMPORTANT: do not import from a CDN URL here — webpack can't bundle an external ESM
+        // module into a Worker reliably in Next.js dev, which causes compile/runtime errors.
+        const { pipeline, env } = await import('@huggingface/transformers')
 
         // Disable local model caching in the worker context
         env.allowLocalModels = false
         env.useBrowserCache = true
 
-        const embedder = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', {
-            quantized: true,
-        })
+        const embedder = await pipeline(
+            'feature-extraction',
+            'Xenova/all-MiniLM-L6-v2',
+            // Some Transformers.js pipeline options are not reflected in TS types yet.
+            { quantized: true } as unknown as Record<string, unknown>
+        )
 
         const jdEmbedding: number[] = Array.from(
             (await embedder(jd, { pooling: 'mean', normalize: true })).data as Float32Array
@@ -101,10 +103,12 @@ self.onmessage = async (event: MessageEvent) => {
         // ── Phase 2: Reasoning ────────────────────────────────────────────────
         self.postMessage({ type: 'PROGRESS', step: 2 })
 
-        const generator = await pipeline('text-generation', 'HuggingFaceTB/SmolLM2-135M-Instruct', {
-            quantized: true,
-            dtype: 'q4',
-        })
+        const generator = await pipeline(
+            'text-generation',
+            'HuggingFaceTB/SmolLM2-135M-Instruct',
+            // Some Transformers.js pipeline options are not reflected in TS types yet.
+            { quantized: true, dtype: 'q4' } as unknown as Record<string, unknown>
+        )
 
         const results: ClientAIResult[] = []
 

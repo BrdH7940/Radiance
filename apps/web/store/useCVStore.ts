@@ -43,6 +43,8 @@ export interface CVStore {
     galleryLoadingStep: 0 | 1 | 2
     /** The user's full project gallery, fetched once at startup and cached here. */
     projectGallery: ProjectItem[]
+    /** The Supabase user id that `projectGallery` currently belongs to. */
+    galleryOwnerUserId: string | null
     /** Top-5 ranked projects returned by the WebWorker or fallback API. */
     recommendedProjects: ClientAIResult[]
     /** Project IDs the user explicitly checked in the ProjectSelectionHub. */
@@ -83,7 +85,7 @@ export interface CVStore {
     /** Any → ERROR. Stores the error message for display. */
     setGalleryError: (message: string) => void
     /** Populate `projectGallery` from the API (called once on dashboard mount). */
-    setProjectGallery: (items: ProjectItem[]) => void
+    setProjectGallery: (items: ProjectItem[], ownerUserId: string) => void
     /** Update galleryLoadingStep during the ANALYZING phase. */
     setGalleryLoadingStep: (step: 0 | 1 | 2) => void
 }
@@ -94,6 +96,7 @@ const galleryInitialState = {
     galleryPhase: 'IDLE' as GalleryPhase,
     galleryLoadingStep: 0 as const,
     projectGallery: [] as ProjectItem[],
+    galleryOwnerUserId: null as string | null,
     recommendedProjects: [] as ClientAIResult[],
     selectedProjectIds: [] as string[],
     galleryError: '',
@@ -165,6 +168,7 @@ export const useCVStore = create<CVStore>((set) => ({
             loadingSteps: LOADING_STEPS,
             // Preserve projectGallery so it isn't re-fetched on every reset
             projectGallery: state.projectGallery,
+            galleryOwnerUserId: state.galleryOwnerUserId,
             galleryPhase: 'IDLE' as GalleryPhase,
             galleryLoadingStep: 0 as const,
             recommendedProjects: [],
@@ -206,7 +210,11 @@ export const useCVStore = create<CVStore>((set) => ({
 
     setGalleryError: (message) => set({ galleryPhase: 'ERROR', galleryError: message }),
 
-    setProjectGallery: (items) => set({ projectGallery: items }),
+    setProjectGallery: (items, ownerUserId) =>
+        set({
+            projectGallery: items,
+            galleryOwnerUserId: ownerUserId,
+        }),
 
     setGalleryLoadingStep: (step) => set({ galleryLoadingStep: step }),
 }))

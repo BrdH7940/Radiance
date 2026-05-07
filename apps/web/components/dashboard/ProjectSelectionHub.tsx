@@ -6,6 +6,33 @@ import { useCVStore } from '@/store/useCVStore'
 
 const FIT_THRESHOLD = 0.2
 
+function formatEnhanceFromGalleryError(err: unknown): string {
+    const raw = err instanceof Error ? err.message : String(err)
+
+    // `getJson()` throws: `API 403: <text>`
+    const match = raw.match(/^API\s+\d+:\s*([\s\S]*)$/)
+    const payload = match?.[1]?.trim() ?? ''
+
+    // FastAPI usually returns JSON: {"detail":"..."}
+    if (payload.startsWith('{')) {
+        try {
+            const parsed = JSON.parse(payload) as { detail?: unknown }
+            const detail = typeof parsed.detail === 'string' ? parsed.detail : ''
+            if (detail.includes('Invalid or unauthorized project IDs')) {
+                return `Some selected projects are invalid or not owned by your account. ${detail}`
+            }
+        } catch {
+            // ignore parse failure
+        }
+    }
+
+    if (raw.includes('Invalid or unauthorized project IDs')) {
+        return `Some selected projects are invalid or not owned by your account. ${raw}`
+    }
+
+    return raw || 'Failed to start enhancement.'
+}
+
 interface ProjectSelectionHubProps {
     onJobQueued: (jobId: string) => void
 }
@@ -46,19 +73,36 @@ export function ProjectSelectionHub({ onJobQueued }: ProjectSelectionHubProps) {
                 : ''
 
         try {
+            const selectedResults = recommendedProjects.filter((r) =>
+                selectedProjectIds.includes(r.project_id)
+            )
+
+            // Silently drop any project IDs that are no longer present in the local
+            // gallery cache (e.g. soft-deleted between the last rerank and now).
+            // Skip the filter when the gallery is empty — that indicates the cache
+            // hasn't loaded yet, not that the projects are gone; let the backend verify.
+            const allowedIds = new Set(projectGallery.map((p) => p.id))
+            const verifiedClientResults =
+                allowedIds.size > 0
+                    ? selectedResults.filter((r) => allowedIds.has(r.project_id))
+                    : selectedResults
+
+            if (verifiedClientResults.length === 0) {
+                setGalleryError(
+                    'None of the selected projects are available any more. Please refresh the page and re-run the analysis.'
+                )
+                return
+            }
+
             finalizeGallery()
             const response = await enhanceFromGallery({
                 cv_text: cvText,
                 jd_text: jdText,
-                client_results: recommendedProjects.filter((r) =>
-                    selectedProjectIds.includes(r.project_id)
-                ),
+                client_results: verifiedClientResults,
             })
             onJobQueued(response.id)
         } catch (err) {
-            setGalleryError(
-                err instanceof Error ? err.message : 'Failed to start enhancement.'
-            )
+            setGalleryError(formatEnhanceFromGalleryError(err))
         }
     }
 

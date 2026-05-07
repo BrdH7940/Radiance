@@ -32,6 +32,7 @@ const GALLERY_STEP_LABELS: Record<0 | 1 | 2, string> = {
 export default function EnhanceCVPage() {
     const router = useRouter()
     const {
+        user,
         cvFile,
         jdText,
         phase,
@@ -40,6 +41,7 @@ export default function EnhanceCVPage() {
         galleryPhase,
         galleryLoadingStep,
         projectGallery,
+        galleryOwnerUserId,
         setPhase,
         setInputReviewMode,
         setLoadingStepIndex,
@@ -64,7 +66,11 @@ export default function EnhanceCVPage() {
 
     // ── Load project gallery once on mount ────────────────────────────────────
     useEffect(() => {
-        if (projectGallery.length > 0) return
+        const currentUserId = user?.id ?? null
+        if (!currentUserId) return
+
+        // Only reuse cached gallery if it belongs to the current authenticated user.
+        if (projectGallery.length > 0 && galleryOwnerUserId === currentUserId) return
 
         const loadGallery = async () => {
             try {
@@ -90,13 +96,13 @@ export default function EnhanceCVPage() {
                     description: p.description,
                     tech_stack: p.technologies,
                 }))
-                setProjectGallery(items)
+                setProjectGallery(items, currentUserId)
             } catch {
                 // Non-fatal: gallery is optional for the legacy flow
             }
         }
         void loadGallery()
-    }, [projectGallery.length, setProjectGallery])
+    }, [projectGallery.length, galleryOwnerUserId, setProjectGallery, user?.id])
 
     // ── Poll for gallery job completion ────────────────────────────────────────
     useEffect(() => {

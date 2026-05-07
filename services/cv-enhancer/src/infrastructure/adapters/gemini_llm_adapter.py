@@ -12,10 +12,12 @@ so that `GroqLLMAdapter` and any future provider adapter can reuse the exact sam
 LangGraph pipeline with a different underlying `BaseChatModel`.
 """
 
+import json
 import logging
 from typing import List, TypedDict
 
 from langchain_core.language_models import BaseChatModel
+from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import END, StateGraph
@@ -94,12 +96,204 @@ def build_llm_pipelines(llm: BaseChatModel):
         | llm.with_structured_output(_AnalyzerOutput)
     )
 
-    enhancer_chain = (
-        ChatPromptTemplate.from_messages(
-            [("system", ENHANCER_SYSTEM_PROMPT), ("human", ENHANCER_HUMAN_PROMPT)]
+    def _extract_first_json_object(text: str) -> str:
+        """Extract the first top-level JSON object from model text output."""
+        s = text.strip()
+        # Strip common markdown fences.
+        if "```" in s:
+            parts = s.split("```")
+            # Prefer the largest fenced block content.
+            s = max((p.strip() for p in parts if p.strip()), key=len, default=s)
+            if s.lower().startswith("json"):
+                s = s[4:].lstrip()
+
+        start = s.find("{")
+        if start == -1:
+            return s
+
+        depth = 0
+        in_str = False
+        esc = False
+        for i in range(start, len(s)):
+            ch = s[i]
+            if in_str:
+                if esc:
+                    esc = False
+                elif ch == "\\":
+                    esc = True
+                elif ch == '"':
+                    in_str = False
+            else:
+                if ch == '"':
+                    in_str = True
+                elif ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                    if depth == 0:
+                        return s[start : i + 1]
+        return s[start:]
+
+    def _normalize_cvresume_payload(payload: object) -> object:  # noqa: C901
+        """Coerce LLM JSON output to match CVResumeSchema before Pydantic validation.
+
+        Handles the various ways Groq/other models deviate from the exact schema:
+        - summary as a bare string
+        - links as "Label: value" strings instead of {label, url} objects
+        - honors / description / skills as a bare string instead of a list
+        - skill_groups using group_name instead of category
+        - null where the schema expects a str
+        """
+        if not isinstance(payload, dict):
+            return payload
+
+        # ── summary ─────────────────────────────────────────────────────────
+        summary = payload.get("summary")
+        if isinstance(summary, str):
+            payload["summary"] = {"text": summary}
+        elif summary is None:
+            payload["summary"] = None
+
+        # ── personal_info.links ─────────────────────────────────────────────
+        pi = payload.get("personal_info")
+        if isinstance(pi, dict):
+            links = pi.get("links")
+            if links is None:
+                pi["links"] = []
+            elif isinstance(links, dict):
+                # {"LinkedIn": "https://...", "GitHub": "..."} → [{label,url}, ...]
+                pi["links"] = [
+                    {"label": str(label), "url": str(url)}
+                    for label, url in links.items()
+                    if label is not None and url is not None
+                ]
+            elif isinstance(links, list):
+                normalized_links = []
+                for lnk in links:
+                    if isinstance(lnk, dict):
+                        normalized_links.append(lnk)
+                    elif isinstance(lnk, str):
+                        # "LinkedIn: HuyLe" or "GitHub: url" → {label, url}
+                        if ":" in lnk:
+                            label, _, url = lnk.partition(":")
+                            normalized_links.append(
+                                {"label": label.strip(), "url": url.strip()}
+                            )
+                        else:
+                            normalized_links.append({"label": lnk, "url": lnk})
+                pi["links"] = normalized_links
+
+        # ── education ────────────────────────────────────────────────────────
+        edu = payload.get("education")
+        if isinstance(edu, list):
+            for item in edu:
+                if not isinstance(item, dict):
+                    continue
+                # Null string fields → empty string
+                for k in ("start_date", "end_date", "degree", "major",
+                          "institution", "location", "gpa"):
+                    if item.get(k) is None:
+                        item[k] = ""
+                # honors must be a list
+                honors = item.get("honors")
+                if isinstance(honors, str):
+                    item["honors"] = [honors] if honors.strip() else []
+                elif honors is None:
+                    item["honors"] = []
+
+        # ── projects ─────────────────────────────────────────────────────────
+        projects = payload.get("projects")
+        if isinstance(projects, list):
+            for proj in projects:
+                if not isinstance(proj, dict):
+                    continue
+                # description must be a list of strings
+                desc = proj.get("description")
+                if isinstance(desc, str):
+                    # Split on newlines/bullets if present, otherwise wrap
+                    lines = [
+                        ln.lstrip("•-– ").strip()
+                        for ln in desc.splitlines()
+                        if ln.strip()
+                    ]
+                    proj["description"] = lines if lines else [desc]
+                elif desc is None:
+                    proj["description"] = []
+                # tech_stack must be a list
+                ts = proj.get("tech_stack")
+                if isinstance(ts, str):
+                    proj["tech_stack"] = [t.strip() for t in ts.split(",") if t.strip()]
+                elif ts is None:
+                    proj["tech_stack"] = []
+                # Null string fields → empty string
+                for k in ("start_date", "end_date", "role", "name"):
+                    if proj.get(k) is None:
+                        proj[k] = ""
+
+        # ── skill_groups ─────────────────────────────────────────────────────
+        skill_groups = payload.get("skill_groups")
+        if isinstance(skill_groups, list):
+            for sg in skill_groups:
+                if not isinstance(sg, dict):
+                    continue
+                # Rename group_name → category
+                if "category" not in sg and "group_name" in sg:
+                    sg["category"] = sg.pop("group_name")
+                # skills must be a list
+                skills = sg.get("skills")
+                if isinstance(skills, str):
+                    sg["skills"] = [s.strip() for s in skills.split(",") if s.strip()]
+                elif skills is None:
+                    sg["skills"] = []
+
+        # ── experiences ──────────────────────────────────────────────────────
+        experiences = payload.get("experiences")
+        if isinstance(experiences, list):
+            for exp in experiences:
+                if not isinstance(exp, dict):
+                    continue
+                bullets = exp.get("bullets")
+                if isinstance(bullets, str):
+                    lines = [
+                        ln.lstrip("•-– ").strip()
+                        for ln in bullets.splitlines()
+                        if ln.strip()
+                    ]
+                    exp["bullets"] = lines if lines else [bullets]
+                elif bullets is None:
+                    exp["bullets"] = []
+
+        return payload
+
+    # NOTE: Groq tool-calling can fail if the model emits invalid JSON inside the
+    # tool-call arguments (Groq rejects before LangChain can parse). To make the
+    # fallback robust, we allow building the enhancer in "text JSON" mode by
+    # setting llm._prefer_text_json = True (used by GroqLLMAdapter).
+    prefer_text_json = bool(getattr(llm, "_prefer_text_json", False))
+    if prefer_text_json:
+        enhancer_chain = (
+            ChatPromptTemplate.from_messages(
+                [
+                    (
+                        "system",
+                        ENHANCER_SYSTEM_PROMPT
+                        + "\n\nReturn ONLY a single valid JSON object. No markdown, no code fences, no extra text."
+                        + "\nCritical: `summary` MUST be an object like {{\"text\": \"...\"}} (not a string)."
+                        + "\nCritical: Never output null for any field that is a string in the schema (use \"\" instead).",
+                    ),
+                    ("human", ENHANCER_HUMAN_PROMPT),
+                ]
+            )
+            | llm
+            | StrOutputParser()
         )
-        | llm.with_structured_output(CVResumeSchema)
-    )
+    else:
+        enhancer_chain = (
+            ChatPromptTemplate.from_messages(
+                [("system", ENHANCER_SYSTEM_PROMPT), ("human", ENHANCER_HUMAN_PROMPT)]
+            )
+            | llm.with_structured_output(CVResumeSchema)
+        )
 
     # ------------------------------------------------------------------
     # Node 1 — Analyzer
@@ -149,14 +343,21 @@ def build_llm_pipelines(llm: BaseChatModel):
             else "No structural red flags identified."
         )
 
-        result: CVResumeSchema = await enhancer_chain.ainvoke(
-            {
-                "cv_text": state["cv_text"],
-                "jd_text": state["jd_text"],
-                "missing_skills_text": missing_skills_text,
-                "red_flags_text": red_flags_text,
-            }
-        )
+        payload = {
+            "cv_text": state["cv_text"],
+            "jd_text": state["jd_text"],
+            "missing_skills_text": missing_skills_text,
+            "red_flags_text": red_flags_text,
+        }
+
+        if prefer_text_json:
+            raw = await enhancer_chain.ainvoke(payload)
+            json_text = _extract_first_json_object(raw)
+            parsed = json.loads(json_text)
+            parsed = _normalize_cvresume_payload(parsed)
+            result: CVResumeSchema = CVResumeSchema.model_validate(parsed)
+        else:
+            result: CVResumeSchema = await enhancer_chain.ainvoke(payload)
 
         logger.info(
             "Pipeline ✓ Enhancer — produced CV JSON for '%s' with %d experiences.",

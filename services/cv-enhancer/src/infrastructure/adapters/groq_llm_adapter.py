@@ -39,12 +39,18 @@ class GroqLLMAdapter(ILLMService):
             api_key=api_key,
             model=model,
             temperature=0.2,
+            max_tokens=4096,
             max_retries=2,
         )
+        # Avoid Groq tool-calling JSON parsing failures for large structured outputs.
+        # The pipeline builder will switch the Enhancer node into "text JSON" mode.
+        setattr(self._llm, "_prefer_text_json", True)
         self._graph = build_llm_pipelines(self._llm)
         logger.info("GroqLLMAdapter initialised with model '%s'.", model)
 
-    async def analyze_and_enhance(self, cv_text: str, jd_text: str) -> FullAnalysisOutput:
+    async def analyze_and_enhance(
+        self, cv_text: str, jd_text: str
+    ) -> FullAnalysisOutput:
         logger.info("GroqLLMAdapter: starting analyze_and_enhance pipeline.")
         result = await run_analyze_and_enhance(self._llm, self._graph, cv_text, jd_text)
         logger.info("GroqLLMAdapter: pipeline complete.")
@@ -56,7 +62,9 @@ class GroqLLMAdapter(ILLMService):
         jd_text: str,
         verified_projects: List[ProjectItem],
     ) -> CVResumeSchema:
-        return await run_enhance_from_gallery(self._llm, cv_text, jd_text, verified_projects)
+        return await run_enhance_from_gallery(
+            self._llm, cv_text, jd_text, verified_projects
+        )
 
     async def rank_projects_for_jd(
         self,
