@@ -171,6 +171,7 @@ export const useCVStore = create<CVStore>((set) => ({
         set((state) => ({
             ...initialState,
             user: state.user,
+            authHydrated: state.authHydrated,
             loadingSteps: LOADING_STEPS,
             // Preserve projectGallery so it isn't re-fetched on every reset
             projectGallery: state.projectGallery,

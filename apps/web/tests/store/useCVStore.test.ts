@@ -197,8 +197,6 @@ describe('useCVStore — reset()', () => {
             useCVStore.getState().setAuthHydrated(true)
             useCVStore.getState().reset()
         })
-        // authHydrated is part of initialState (false), so it IS reset.
-        // This test documents the current behavior explicitly.
-        expect(useCVStore.getState().authHydrated).toBe(false)
+        expect(useCVStore.getState().authHydrated).toBe(true)
     })
 })
