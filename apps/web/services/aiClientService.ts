@@ -20,6 +20,27 @@ export type ProgressStep = 1 | 2
 
 export type OnProgressCallback = (step: ProgressStep) => void
 
+/**
+ * Detect tiny-model loops where the same 4-word window repeats verbatim,
+ * e.g. "the project is relevant because the project is relevant because…".
+ * Returns true when at least one 4-gram appears 2+ times in the string.
+ */
+function hasRepeatingFourGram(s: string): boolean {
+    const tokens = s
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+        .split(/\s+/)
+        .filter(Boolean)
+    if (tokens.length < 8) return false
+    const seen = new Set<string>()
+    for (let i = 0; i + 4 <= tokens.length; i++) {
+        const key = tokens.slice(i, i + 4).join(' ')
+        if (seen.has(key)) return true
+        seen.add(key)
+    }
+    return false
+}
+
 function normalizeClientReasoning(raw: string | null | undefined): string {
     const DEFAULT = 'Relevant technical experience matches the job requirements.'
     const s = (raw ?? '').replace(/\u0000/g, '').trim()
@@ -35,7 +56,11 @@ function normalizeClientReasoning(raw: string | null | undefined): string {
         .replace(/[`"'“”‘’]+$/, '')
         .trim()
 
-    if (unwrapped.length >= 10) return unwrapped
+    // Defend against residual SmolLM2-style loops the worker's repetition_penalty
+    // didn't fully suppress.
+    if (hasRepeatingFourGram(unwrapped)) return DEFAULT
+
+    if (unwrapped.length >= 15) return unwrapped
 
     // As a last resort, if the string still contains useful text, keep it; otherwise default.
     const fallback = s
@@ -43,7 +68,9 @@ function normalizeClientReasoning(raw: string | null | undefined): string {
         .replace(/[`"'“”‘’]+$/, '')
         .trim()
 
-    return fallback.length >= 10 ? fallback : DEFAULT
+    if (hasRepeatingFourGram(fallback)) return DEFAULT
+
+    return fallback.length >= 15 ? fallback : DEFAULT
 }
 
 function normalizeClientResults(results: ClientAIResult[]): ClientAIResult[] {

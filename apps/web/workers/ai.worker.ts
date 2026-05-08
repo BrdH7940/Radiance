@@ -52,16 +52,11 @@ function extractReasoning(raw: string): string {
         .replace(/\r\n/g, '\n')
         .trim()
 
-    // Prefer the explicit marker if present.
-    const afterMarker = (() => {
-        const idx = cleaned.toLowerCase().indexOf('reasoning:')
-        if (idx >= 0) return cleaned.slice(idx + 'reasoning:'.length).trim()
-        return cleaned
-    })()
+    if (!cleaned) return DEFAULT
 
     // Some small instruct models respond with JSON (or a JSON-like blob).
     // Try to parse and pull a likely field.
-    const jsonCandidateMatch = afterMarker.match(/\{[\s\S]*\}/)
+    const jsonCandidateMatch = cleaned.match(/\{[\s\S]*\}/)
     if (jsonCandidateMatch?.[0]) {
         try {
             const obj = JSON.parse(jsonCandidateMatch[0]) as Record<string, unknown>
@@ -77,8 +72,8 @@ function extractReasoning(raw: string): string {
         }
     }
 
-    // Strip wrapping quotes/backticks and obvious artifacts.
-    const unwrapped = afterMarker
+    // Strip wrapping quotes/backticks and obvious list/dash artifacts.
+    const unwrapped = cleaned
         .replace(/^[`"'“”‘’]+/, '')
         .replace(/[`"'“”‘’]+$/, '')
         .replace(/^\s*[-–—]\s*/, '')
@@ -150,35 +145,59 @@ self.onmessage = async (event: MessageEvent) => {
             'text-generation',
             'HuggingFaceTB/SmolLM2-135M-Instruct',
             // Some Transformers.js pipeline options are not reflected in TS types yet.
-            { quantized: true, dtype: 'q4' } as unknown as Record<string, unknown>
+            { dtype: 'q4' } as unknown as Record<string, unknown>
         )
 
         const results: ClientAIResult[] = []
 
         for (const { item, score } of top5) {
-            const prompt =
-                `Job Description (excerpt): ${jd.slice(0, 300)}\n\n` +
-                `Project: ${buildProjectText(item)}\n\n` +
-                `Explain in exactly one sentence why this project is relevant to the job. ` +
-                `Start your response with "REASONING:"`
+            // SmolLM2-Instruct is a chat-tuned model — it only follows instructions
+            // when fed through the chat template (i.e. as a messages array). Passing
+            // a raw string causes it to treat the prompt as plain text to continue,
+            // which produces empty / repetitive output on a 135M model.
+            const messages = [
+                {
+                    role: 'system',
+                    content:
+                        'You are a senior technical recruiter. Reply with exactly one concise sentence ' +
+                        '(no preface, no quotes, no list) that explains why a candidate project is relevant ' +
+                        'to the given job description.',
+                },
+                {
+                    role: 'user',
+                    content:
+                        `Job Description (excerpt):\n${jd.slice(0, 600)}\n\n` +
+                        `Candidate Project:\n${buildProjectText(item)}\n\n` +
+                        `Why is this project relevant to the job? One sentence only.`,
+                },
+            ]
 
             let reasoning = 'Relevant technical experience matches the job requirements.'
             try {
-                const out = await generator(prompt, {
-                    max_new_tokens: 60,
-                    temperature: 0.3,
-                    do_sample: false,
-                })
-                const generated: string =
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    (out as any)[0]?.generated_text ?? ''
-                // Strip the prompt prefix that some models echo back
-                const afterPrompt = generated.includes('REASONING:')
-                    ? generated.slice(generated.indexOf('REASONING:'))
-                    : generated
-                reasoning = extractReasoning(afterPrompt)
-            } catch {
-                // Non-fatal: keep default reasoning and continue
+                const out = await generator(messages, {
+                    max_new_tokens: 80,
+                    do_sample: true,
+                    temperature: 0.4,
+                    top_p: 0.9,
+                    repetition_penalty: 1.3,
+                    no_repeat_ngram_size: 4,
+                    return_full_text: false,
+                } as unknown as Record<string, unknown>)
+
+                // v3 chat-mode shape: [{ generated_text: [...messages, { role: 'assistant', content }] }]
+                // String-mode shape (with return_full_text:false): [{ generated_text: '<completion>' }]
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const first = (out as any)?.[0]?.generated_text
+                let assistant = ''
+                if (Array.isArray(first)) {
+                    const last = first[first.length - 1]
+                    assistant = typeof last?.content === 'string' ? last.content : ''
+                } else if (typeof first === 'string') {
+                    assistant = first
+                }
+                reasoning = extractReasoning(assistant)
+            } catch (e) {
+                console.warn('[ai.worker] reasoning failed for project', item.id, e)
             }
 
             results.push({
