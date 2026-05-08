@@ -98,6 +98,7 @@ services/cv-enhancer/
 │   │   ├── ports/
 │   │   │   ├── document_parser_port.py
 │   │   │   ├── history_repository_port.py
+│   │   │   ├── job_notifier_port.py
 │   │   │   ├── job_repository_port.py
 │   │   │   ├── llm_port.py             # ILLMService interface
 │   │   │   ├── pdf_render_port.py
@@ -116,6 +117,7 @@ services/cv-enhancer/
 │   │   │   ├── weasyprint_pdf_adapter.py
 │   │   │   ├── supabase_project_repository.py
 │   │   │   ├── supabase_history_repository.py
+│   │   │   ├── supabase_realtime_notifier.py
 │   │   │   └── supabase_client.py
 │   │   ├── parsers/
 │   │   │   └── pdfplumber_adapter.py
@@ -309,7 +311,17 @@ GET /api/v1/analyses/{job_id}
 Authorization: Bearer <supabase_access_token>
 ```
 
-Poll the status of a queued/running job. Returns full result when `status == "completed"`.
+Fetch the status of a queued/running job. Returns full result when `status == "completed"`.
+
+**Realtime status events (recommended):**
+
+Instead of polling this endpoint, clients subscribe to Supabase Realtime:
+
+- Channel (topic): `job:<job_id>`
+- Event: `status`
+- Payload: `{ "status": "completed" | "failed", "job_id": "<job_id>" }`
+
+The worker broadcasts when it marks the DynamoDB job `COMPLETED` or `FAILED`. The client then calls this endpoint once to fetch the full result payload.
 
 **Response `200` (pending/processing):**
 ```json
@@ -786,9 +798,19 @@ DynamoDB table access for `AnalysisJob` records.
 |--------|-------------|
 | `save(job)` | Create a new job record |
 | `get(job_id)` | Fetch a job by ID |
-| `update(job)` | Overwrite a job record |
+| `update(job)` | Uses `update_item` for status-only transitions; uses `put_item` when writing the full COMPLETED payload |
 
 Uses `PAY_PER_REQUEST` billing. Table partition key: `user_id` (configurable).
+
+### SupabaseRealtimeNotifier
+
+Broadcasts job completion/failure events via Supabase Realtime REST broadcast API:
+
+- Topic: `job:<job_id>`
+- Event: `status`
+- Payload: `{ status, job_id }`
+
+This reduces load by avoiding client-side polling loops.
 
 ### SQSService
 
@@ -984,7 +1006,7 @@ pip install -r requirements.txt
 IN_PROCESS_WORKER=1 python src/main.py
 ```
 
-`IN_PROCESS_WORKER=1` skips SQS; analysis jobs run inline via `asyncio.create_task()`. The frontend polls the same way — no separate worker process needed.
+`IN_PROCESS_WORKER=1` skips SQS; analysis jobs run inline via `asyncio.create_task()`. Clients still receive terminal job status via Supabase Realtime and fetch the full result via `GET /api/v1/analyses/{job_id}`.
 
 ### Run the local SQS worker (alternative)
 

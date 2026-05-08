@@ -278,8 +278,8 @@ Runs the full 5-step sequence with optional step-callback for UI progress:
 Step 0 → getUploadUrl()
 Step 1 → uploadToS3()
 Step 2 → triggerAnalysis()
-Step 3 → (polling begins)
-Step 4 → pollJobStatus() (every 2s, up to 300 attempts = ~10 min)
+Step 3 → subscribe to Supabase Realtime channel `job:<jobId>` (event: `status`)
+Step 4 → on terminal status, fetch once via pollJobStatus() to retrieve the full result payload
 ```
 
 Returns `{ jobId, status, result, error }`.
@@ -516,7 +516,8 @@ Invisible component in root layout that subscribes to `supabase.auth.onAuthState
       - GET /api/v1/resumes/upload-urls → presigned URL + s3_key
       - PUT direct to S3 (browser → S3)
       - POST /api/v1/analyses → jobId
-      - Poll GET /api/v1/analyses/{jobId} every 2s
+      - Subscribe to Supabase Realtime `job:<jobId>` (event: `status`)
+      - On terminal status, call GET /api/v1/analyses/{jobId} once to fetch the full result
    c. On complete: setAnalysisResult(result) + setPhase('dashboard')
 6. AnalysisDashboard shown: score gauge, skill gaps, red flags
 7. User clicks "Quick Enhance (ATS-Friendly)":
@@ -548,7 +549,8 @@ Invisible component in root layout that subscribes to `supabase.auth.onAuthState
       → POST /api/v1/analyses/enhance-from-gallery
       → returns jobId
    b. finalizeGallery() → galleryPhase: FINALIZING
-   c. Poll GET /api/v1/analyses/{jobId} every 2s
+   c. Subscribe to Supabase Realtime `job:<jobId>` (event: `status`)
+      then call GET /api/v1/analyses/{jobId} once to fetch the full result
 6. On complete:
    - setCvData(result.enhanced_cv_json)
    - setPdfUrl(result.pdf_url)
@@ -628,7 +630,7 @@ The Gallery FSM runs **parallel** to the legacy `phase` AppPhase. It has 5 state
                 ▼
     ┌───────────────────────┐
     │      FINALIZING        │
-    │  (polling backend job) │
+    │ (Realtime job updates) │
     └───────────┬───────────┘
                 │ completeGallery()
                 ▼
@@ -703,7 +705,7 @@ When `/workspace?id=<uuid>`:
 `GalleryOverlay` component renders as a fixed full-screen modal overlay when `galleryPhase !== 'IDLE'`, showing:
 - **ANALYZING** — loading spinner + step progress (same as dashboard flow)
 - **CONSULTING_GALLERY** — `ProjectSelectionHub` embedded in overlay
-- **FINALIZING** — polling spinner
+- **FINALIZING** — waiting spinner (Supabase Realtime job status)
 - **ERROR** — error panel with dismiss button
 
 ---

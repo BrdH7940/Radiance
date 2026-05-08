@@ -3,8 +3,13 @@ SupabaseHistoryRepository — implements IHistoryRepository via Supabase.
 
 Uses the service_role Supabase client and applies explicit user_id filtering
 on every query to enforce data ownership (service_role bypasses RLS).
+
+All public methods are `async def` but the underlying supabase-py Client is
+synchronous. Each `.execute()` call is therefore offloaded via
+`asyncio.to_thread()` so the FastAPI event loop is never blocked.
 """
 
+import asyncio
 import logging
 from typing import List, Optional
 from uuid import UUID
@@ -31,8 +36,8 @@ class SupabaseHistoryRepository(IHistoryRepository):
     async def list(self, user_id: str) -> List[CVHistorySummary]:
         """Return lightweight summaries ordered newest-first."""
         try:
-            response = (
-                self._client.table(_TABLE)
+            response = await asyncio.to_thread(
+                lambda: self._client.table(_TABLE)
                 .select(_SUMMARY_COLUMNS)
                 .eq("user_id", user_id)
                 .order("created_at", desc=True)
@@ -48,8 +53,8 @@ class SupabaseHistoryRepository(IHistoryRepository):
     ) -> Optional[CVHistoryEntry]:
         """Fetch a full history entry including the enhanced_cv_json payload."""
         try:
-            response = (
-                self._client.table(_TABLE)
+            response = await asyncio.to_thread(
+                lambda: self._client.table(_TABLE)
                 .select("*")
                 .eq("id", str(history_id))
                 .eq("user_id", user_id)
@@ -77,9 +82,13 @@ class SupabaseHistoryRepository(IHistoryRepository):
             "matching_score": entry.matching_score,
             "enhanced_cv_json": entry.enhanced_cv_json,
             "pdf_s3_key": entry.pdf_s3_key,
+            "missing_skills": entry.missing_skills,
+            "red_flags": entry.red_flags,
         }
         try:
-            response = self._client.table(_TABLE).insert(payload).execute()
+            response = await asyncio.to_thread(
+                lambda: self._client.table(_TABLE).insert(payload).execute()
+            )
             return CVHistoryEntry(**response.data[0])
         except Exception as exc:
             logger.error(
@@ -107,8 +116,8 @@ class SupabaseHistoryRepository(IHistoryRepository):
             return await self.get_by_id(user_id, history_id)
 
         try:
-            response = (
-                self._client.table(_TABLE)
+            response = await asyncio.to_thread(
+                lambda: self._client.table(_TABLE)
                 .update(payload)
                 .eq("id", str(history_id))
                 .eq("user_id", user_id)
@@ -129,8 +138,8 @@ class SupabaseHistoryRepository(IHistoryRepository):
     async def delete(self, user_id: str, history_id: UUID) -> bool:
         """Delete a history row owned by the given user. Returns True on success."""
         try:
-            response = (
-                self._client.table(_TABLE)
+            response = await asyncio.to_thread(
+                lambda: self._client.table(_TABLE)
                 .delete()
                 .eq("id", str(history_id))
                 .eq("user_id", user_id)

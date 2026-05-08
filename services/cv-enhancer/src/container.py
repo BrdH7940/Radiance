@@ -27,6 +27,7 @@ from pathlib import Path
 from config import AppSettings, get_settings
 from core.ports.document_parser_port import IDocumentParser
 from core.ports.history_repository_port import IHistoryRepository
+from core.ports.job_notifier_port import IJobNotifier
 from core.ports.job_repository_port import IJobRepository
 from core.ports.llm_port import ILLMService
 from core.ports.pdf_render_port import IPDFRenderService
@@ -41,6 +42,7 @@ from infrastructure.adapters.groq_llm_adapter import GroqLLMAdapter
 from infrastructure.adapters.supabase_client import get_supabase_client
 from infrastructure.adapters.supabase_history_repository import SupabaseHistoryRepository
 from infrastructure.adapters.supabase_project_repository import SupabaseProjectRepository
+from infrastructure.adapters.supabase_realtime_notifier import SupabaseRealtimeNotifier
 from infrastructure.adapters.sqs_service import SQSService
 from infrastructure.adapters.weasyprint_pdf_adapter import WeasyPrintPDFAdapter
 from infrastructure.parsers.pdfplumber_adapter import PDFPlumberParser
@@ -163,6 +165,17 @@ def get_history_repository() -> IHistoryRepository:
 
 
 @lru_cache(maxsize=1)
+def get_job_notifier() -> IJobNotifier:
+    """Singleton SupabaseRealtimeNotifier for broadcasting job status events."""
+    settings = get_settings()
+    logger.info("Initialising SupabaseRealtimeNotifier…")
+    return SupabaseRealtimeNotifier(
+        supabase_url=settings.supabase_url,
+        service_role_key=settings.supabase_service_role_key,
+    )
+
+
+@lru_cache(maxsize=1)
 def get_analyze_cv_use_case() -> AnalyzeCVUseCase:
     """Singleton AnalyzeCVUseCase with all injected port implementations."""
     settings = get_settings()
@@ -175,6 +188,7 @@ def get_analyze_cv_use_case() -> AnalyzeCVUseCase:
         pdf_renderer=get_pdf_renderer(),
         settings=settings,
         history_repo=get_history_repository(),
+        job_notifier=get_job_notifier(),
     )
     logger.info("AnalyzeCVUseCase wired successfully.")
     return use_case

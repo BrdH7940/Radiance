@@ -1,9 +1,11 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import type React from 'react'
 import { FileSearch } from 'lucide-react'
 import { useCVStore } from '@/store/useCVStore'
+
+const DEBOUNCE_MS = 300
 
 // Set to true, paste content, then check browser console (F12) and share the output
 const DEBUG_PASTE = false
@@ -25,6 +27,36 @@ interface JDTextareaProps {
 
 export function JDTextarea({ readOnly = false }: JDTextareaProps) {
     const { jdText, setJdText } = useCVStore()
+
+    // Local state drives the textarea so keystrokes feel instant.
+    // A debounced effect flushes to the global Zustand store (300 ms).
+    const [localText, setLocalText] = useState(jdText)
+    const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+    // Keep local state in sync when the store changes from outside (e.g. reset).
+    useEffect(() => {
+        setLocalText(jdText)
+    }, [jdText])
+
+    const handleChange = (value: string) => {
+        setLocalText(value)
+        if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+        debounceTimerRef.current = setTimeout(() => {
+            setJdText(value)
+        }, DEBOUNCE_MS)
+    }
+
+    // Flush on unmount so no update is lost.
+    useEffect(() => {
+        return () => {
+            if (debounceTimerRef.current) {
+                clearTimeout(debounceTimerRef.current)
+                // Flush the latest local value to the store immediately.
+                setJdText(localText)
+            }
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
     const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
         const html = e.clipboardData.getData('text/html')
@@ -106,7 +138,7 @@ export function JDTextarea({ readOnly = false }: JDTextareaProps) {
             textToInsert +
             value.slice(selectionEnd)
 
-        setJdText(newValue)
+        handleChange(newValue)
 
         const cursorPos = selectionStart + textToInsert.length
 
@@ -116,12 +148,13 @@ export function JDTextarea({ readOnly = false }: JDTextareaProps) {
         })
     }
 
+    // Counts are derived from localText so they update instantly on every keystroke.
     const wordCount = useMemo(() => {
-        if (!jdText.trim()) return 0
-        return jdText.trim().split(/\s+/).length
-    }, [jdText])
+        if (!localText.trim()) return 0
+        return localText.trim().split(/\s+/).length
+    }, [localText])
 
-    const charCount = jdText.length
+    const charCount = localText.length
 
     return (
         <div className="flex flex-col h-full">
@@ -158,9 +191,9 @@ export function JDTextarea({ readOnly = false }: JDTextareaProps) {
 
                 {/* Text area */}
                 <textarea
-                    value={jdText}
+                    value={localText}
                     onPaste={handlePaste}
-                    onChange={(e) => setJdText(e.target.value)}
+                    onChange={(e) => handleChange(e.target.value)}
                     placeholder={PLACEHOLDER}
                     readOnly={readOnly}
                     className="

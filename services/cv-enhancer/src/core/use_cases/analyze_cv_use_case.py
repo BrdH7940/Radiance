@@ -19,6 +19,7 @@ Any exception in steps 2–7 marks the job as FAILED with a structured error mes
 so that the background task never fails silently.
 """
 
+import asyncio
 import logging
 import os
 import tempfile
@@ -31,6 +32,7 @@ from core.domain.analysis_job import AnalysisJob, AnalysisResult, JobStatus
 from core.domain.cv_history import CVHistoryEntry
 from core.ports.document_parser_port import IDocumentParser
 from core.ports.history_repository_port import IHistoryRepository
+from core.ports.job_notifier_port import IJobNotifier
 from core.ports.job_repository_port import IJobRepository
 from core.ports.llm_port import ILLMService
 from core.ports.pdf_render_port import IPDFRenderService
@@ -55,6 +57,7 @@ class AnalyzeCVUseCase:
         pdf_renderer: IPDFRenderService,
         settings: AppSettings,
         history_repo: Optional[IHistoryRepository] = None,
+        job_notifier: Optional[IJobNotifier] = None,
     ) -> None:
         self._storage = storage
         self._parser = parser
@@ -63,6 +66,7 @@ class AnalyzeCVUseCase:
         self._pdf_renderer = pdf_renderer
         self._settings = settings
         self._history_repo = history_repo
+        self._job_notifier = job_notifier
 
     async def execute(self, job_id: str, s3_key: str, jd_text: str) -> None:
         """Run the pipeline for a given job.
@@ -104,10 +108,11 @@ class AnalyzeCVUseCase:
         # ── Steps 2–7: Pipeline (any failure → FAILED) ──────────────────────
         with tempfile.TemporaryDirectory(prefix="radiance_cv_") as work_dir:
             try:
-                # Step 2 — Download PDF from S3
+                # Step 2 — Download PDF from S3 (offloaded to thread — boto3 is sync)
                 local_pdf_path = os.path.join(work_dir, "cv.pdf")
                 logger.info("Step 2: Downloading '%s' → '%s'.", s3_key, local_pdf_path)
-                self._storage.download_object(
+                await asyncio.to_thread(
+                    self._storage.download_object,
                     object_key=s3_key,
                     local_path=local_pdf_path,
                 )
@@ -132,21 +137,24 @@ class AnalyzeCVUseCase:
                 )
 
                 # Step 5 — Render CVResumeSchema → HTML → PDF (WeasyPrint)
+                # Offloaded to thread — WeasyPrint is CPU-bound synchronous work.
                 logger.info("Step 5: Rendering CV JSON to PDF via HTML/WeasyPrint.")
                 pdf_output_dir = os.path.join(work_dir, "pdf_output")
-                local_pdf_out: str = self._pdf_renderer.render_to_pdf(
+                local_pdf_out: str = await asyncio.to_thread(
+                    self._pdf_renderer.render_to_pdf,
                     cv_data=analysis.enhanced_cv_json,
                     output_dir=pdf_output_dir,
                 )
                 logger.info("Step 5 ✓ PDF rendered → '%s'.", local_pdf_out)
 
-                # Step 6 — Upload enhanced PDF to S3
+                # Step 6 — Upload enhanced PDF to S3 (offloaded to thread — boto3 is sync)
                 s3_pdf_key = (
                     f"{self._settings.s3_enhanced_prefix}"
                     f"{uuid4().hex}_enhanced_cv.pdf"
                 )
                 logger.info("Step 6: Uploading PDF to S3 key '%s'.", s3_pdf_key)
-                self._storage.upload_file(
+                await asyncio.to_thread(
+                    self._storage.upload_file,
                     local_path=local_pdf_out,
                     object_key=s3_pdf_key,
                     content_type="application/pdf",
@@ -181,6 +189,10 @@ class AnalyzeCVUseCase:
                     "AnalyzeCVUseCase: job '%s' completed successfully.", job_id
                 )
 
+                # Notify subscribers via Supabase Realtime (non-critical, never raises).
+                if self._job_notifier is not None:
+                    await self._job_notifier.notify(job_id, "completed")
+
                 # Step 8 — Persist to Supabase cv_history (authenticated jobs only)
                 if job.user_id and self._history_repo is not None:
                     try:
@@ -194,6 +206,14 @@ class AnalyzeCVUseCase:
                                 mode="json"
                             ),
                             pdf_s3_key=s3_pdf_key,
+                            missing_skills=[
+                                s.model_dump(mode="json")
+                                for s in analysis.missing_skills
+                            ],
+                            red_flags=[
+                                f.model_dump(mode="json")
+                                for f in analysis.red_flags
+                            ],
                         )
                         await self._history_repo.save(history_entry)
                         logger.info(
@@ -236,6 +256,10 @@ class AnalyzeCVUseCase:
             )
             await self._job_repo.update(failed_job)
             logger.info("Job '%s' marked as FAILED.", job_id)
+
+            # Notify subscribers that the job failed (non-critical, never raises).
+            if self._job_notifier is not None:
+                await self._job_notifier.notify(job_id, "failed")
         except Exception as repo_exc:
             logger.critical(
                 "Could not persist FAILED status for job '%s': %s",

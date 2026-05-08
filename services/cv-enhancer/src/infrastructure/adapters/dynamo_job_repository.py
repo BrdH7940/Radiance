@@ -1,10 +1,11 @@
 import logging
+from datetime import datetime, timezone
 
 import boto3
 from boto3.dynamodb.conditions import Attr, Key as DynamoKey
 from botocore.exceptions import ClientError
 
-from core.domain.analysis_job import AnalysisJob
+from core.domain.analysis_job import AnalysisJob, JobStatus
 from core.ports.job_repository_port import IJobRepository
 
 logger = logging.getLogger(__name__)
@@ -112,13 +113,55 @@ class DynamoJobRepository(IJobRepository):
             raise
 
     async def update(self, job: AnalysisJob) -> None:
-        # Ghi đè (upsert) toàn bộ record theo id.
-        item = job.model_dump(mode="json")
-        item[self._pk_name] = self.user_id
-        if self._sk_name:
-            item[self._sk_name] = job.id
-        try:
-            self.table.put_item(Item=item)
-        except ClientError as e:
-            logger.error("Error updating DynamoDB: %s", e.response["Error"]["Message"])
-            raise
+        """Persist a job update.
+
+        Uses ``update_item`` for lightweight status-only transitions
+        (PROCESSING, FAILED) to avoid rewriting the entire record — especially
+        important because the COMPLETED record can carry a large
+        ``enhanced_cv_json`` payload. Falls back to ``put_item`` for COMPLETED
+        jobs where the full result must be written atomically.
+        """
+        if job.status == JobStatus.COMPLETED:
+            # Full upsert: must write the result payload (enhanced_cv_json, pdf_url…).
+            item = job.model_dump(mode="json")
+            item[self._pk_name] = self.user_id
+            if self._sk_name:
+                item[self._sk_name] = job.id
+            try:
+                self.table.put_item(Item=item)
+            except ClientError as e:
+                logger.error("Error updating DynamoDB (put_item): %s", e.response["Error"]["Message"])
+                raise
+        else:
+            # Status-only update (PROCESSING / FAILED): use update_item to
+            # avoid rewriting immutable fields and avoid overwriting the result
+            # payload that may already exist in a race condition.
+            key: dict = {self._pk_name: self.user_id}
+            if self._sk_name:
+                key[self._sk_name] = job.id
+
+            update_expr = "SET #st = :status, updated_at = :ts"
+            expr_names: dict = {"#st": "status"}
+            expr_values: dict = {
+                ":status": job.status.value,
+                ":ts": job.updated_at.isoformat(),
+            }
+
+            if job.error is not None:
+                update_expr += ", #err = :error"
+                expr_names["#err"] = "error"
+                expr_values[":error"] = job.error
+
+            try:
+                self.table.update_item(
+                    Key=key,
+                    UpdateExpression=update_expr,
+                    ExpressionAttributeNames=expr_names,
+                    ExpressionAttributeValues=expr_values,
+                )
+            except ClientError as e:
+                logger.error(
+                    "Error updating DynamoDB (update_item): %s",
+                    e.response["Error"]["Message"],
+                )
+                raise

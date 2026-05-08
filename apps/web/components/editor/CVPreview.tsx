@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { memo, useCallback, useState } from 'react'
 import { FileText, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import type { CVResumeSchema, CVProject } from '@/services/api'
 
@@ -11,7 +11,7 @@ interface CVPreviewProps {
     isRendering?: boolean
 }
 
-export function CVPreview({ cvData, pdfUrl, isRendering = false }: CVPreviewProps) {
+export const CVPreview = memo(function CVPreview({ cvData, pdfUrl, isRendering = false }: CVPreviewProps) {
     const [zoom, setZoom] = useState(90)
     const [page, setPage] = useState(1)
     const totalPages = 1
@@ -128,7 +128,7 @@ export function CVPreview({ cvData, pdfUrl, isRendering = false }: CVPreviewProp
             </div>
         </div>
     )
-}
+})
 
 // ─── CV Document renderer ─────────────────────────────────────────────────────
 

@@ -27,23 +27,36 @@ export interface CVHistoryEntry extends CVHistorySummary {
     jd_text: string | null
     enhanced_cv_json: CVResumeSchema | null
     pdf_s3_key: string | null
+    missing_skills: Array<{ skill: string; importance: string }> | null
+    red_flags: Array<{ title: string; description: string; severity: string }> | null
 }
 
 // ─── Auth helper ──────────────────────────────────────────────────────────────
 
-async function getAuthHeaders(): Promise<Record<string, string>> {
-    const supabase = createClient()
-    const {
-        data: { session },
-    } = await supabase.auth.getSession()
+// Cache the token for 50 seconds — same TTL as api.ts — to avoid repeated
+// Supabase round-trips when the history page polls or re-fetches frequently.
+let _cachedToken: string | null = null
+let _tokenExpiresAt = 0
+const TOKEN_CACHE_TTL_MS = 50_000
 
-    if (!session?.access_token) {
-        throw new Error('Not authenticated. Please sign in to continue.')
+async function getAuthHeaders(): Promise<Record<string, string>> {
+    if (!_cachedToken || Date.now() >= _tokenExpiresAt) {
+        const supabase = createClient()
+        const {
+            data: { session },
+        } = await supabase.auth.getSession()
+
+        if (!session?.access_token) {
+            throw new Error('Not authenticated. Please sign in to continue.')
+        }
+
+        _cachedToken = session.access_token
+        _tokenExpiresAt = Date.now() + TOKEN_CACHE_TTL_MS
     }
 
     return {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${session.access_token}`,
+        Authorization: `Bearer ${_cachedToken}`,
     }
 }
 

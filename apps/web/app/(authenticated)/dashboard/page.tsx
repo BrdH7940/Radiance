@@ -18,8 +18,8 @@ import { AnalysisDashboard } from '@/components/dashboard/AnalysisDashboard'
 import { ProjectSelectionHub } from '@/components/dashboard/ProjectSelectionHub'
 import { useCVStore } from '@/store/useCVStore'
 import { uploadAndAnalyze, AnalysisService } from '@/services/api'
-import type { ProjectItem } from '@/services/api'
 import { analyzeProjectsWithClientAI, type OnProgressCallback } from '@/services/aiClientService'
+import { useProjectGallery } from '@/hooks/useProjectGallery'
 
 const MIN_JD_LENGTH = 50
 
@@ -35,7 +35,6 @@ const MAX_GALLERY_POLL_ATTEMPTS = 300 // ~10 minutes
 export default function EnhanceCVPage() {
     const router = useRouter()
     const {
-        user,
         cvFile,
         jdText,
         phase,
@@ -44,7 +43,6 @@ export default function EnhanceCVPage() {
         galleryPhase,
         galleryLoadingStep,
         projectGallery,
-        galleryOwnerUserId,
         setPhase,
         setInputReviewMode,
         setLoadingStepIndex,
@@ -56,9 +54,11 @@ export default function EnhanceCVPage() {
         startGalleryAnalysis,
         consultGallery,
         setGalleryError,
-        setProjectGallery,
         setGalleryLoadingStep,
     } = useCVStore()
+
+    // Load (and cache) the project gallery — shared logic extracted to a hook.
+    useProjectGallery()
 
     const [validationError, setValidationError] = useState<string | null>(null)
     const [galleryJobId, setGalleryJobId] = useState<string | null>(null)
@@ -66,46 +66,6 @@ export default function EnhanceCVPage() {
     const canAnalyze = !!cvFile && jdText.trim().length >= MIN_JD_LENGTH
     const isAnalyzing = phase === 'analyzing'
     const isGalleryAnalyzing = galleryPhase === 'ANALYZING'
-
-    // ── Load project gallery once on mount ────────────────────────────────────
-    useEffect(() => {
-        const currentUserId = user?.id ?? null
-        if (!currentUserId) return
-
-        // Only reuse cached gallery if it belongs to the current authenticated user.
-        if (projectGallery.length > 0 && galleryOwnerUserId === currentUserId) return
-
-        const loadGallery = async () => {
-            try {
-                const { getSupabaseToken } = await import('@/services/api')
-                const token = await getSupabaseToken()
-                if (!token) return
-
-                const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
-                const res = await fetch(`${API_BASE}/api/v1/projects`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                })
-                if (!res.ok) return
-
-                const data = (await res.json()) as Array<{
-                    id: string
-                    title: string
-                    description: string | null
-                    technologies: string[]
-                }>
-                const items: ProjectItem[] = data.map((p) => ({
-                    id: p.id,
-                    title: p.title,
-                    description: p.description,
-                    tech_stack: p.technologies,
-                }))
-                setProjectGallery(items, currentUserId)
-            } catch {
-                // Non-fatal: gallery is optional for the legacy flow
-            }
-        }
-        void loadGallery()
-    }, [projectGallery.length, galleryOwnerUserId, setProjectGallery, user?.id])
 
     // ── Poll for gallery job completion ────────────────────────────────────────
     useEffect(() => {

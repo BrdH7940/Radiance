@@ -229,17 +229,23 @@ async function buildExtractiveReasoning(
             .slice(0, 12)
         if (candidates.length === 0) return ''
 
+        // Embed all candidates in parallel rather than sequentially.
+        const embeddings = await Promise.all(
+            candidates.map((s) =>
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                embedder(s, { pooling: 'mean', normalize: true }).then(
+                    (out: any) => Array.from(out.data as Float32Array)
+                )
+            )
+        )
+
         let best = ''
         let bestScore = -1
-        for (const s of candidates) {
-            const emb: number[] = Array.from(
-                (await embedder(s, { pooling: 'mean', normalize: true }))
-                    .data as Float32Array
-            )
-            const score = cosineSimilarity(jdEmbedding, emb)
+        for (let i = 0; i < candidates.length; i++) {
+            const score = cosineSimilarity(jdEmbedding, embeddings[i])
             if (score > bestScore) {
                 bestScore = score
-                best = s
+                best = candidates[i]
             }
         }
         return clampOneSentence(best)
@@ -913,15 +919,19 @@ self.onmessage = async (event: MessageEvent) => {
                 .data as Float32Array
         )
 
-        const scored: Array<{ item: ProjectItem; score: number }> = []
-        for (const item of gallery) {
-            const text = buildProjectText(item)
-            const emb: number[] = Array.from(
-                (await embedder(text, { pooling: 'mean', normalize: true }))
-                    .data as Float32Array
-            )
-            scored.push({ item, score: cosineSimilarity(jdEmbedding, emb) })
-        }
+        // Embed all projects in parallel — Transformers.js WASM calls are
+        // non-blocking per invocation, so Promise.all gives a real speedup
+        // when the gallery has many projects.
+        const scored: Array<{ item: ProjectItem; score: number }> = await Promise.all(
+            gallery.map(async (item) => {
+                const text = buildProjectText(item)
+                const emb: number[] = Array.from(
+                    (await embedder(text, { pooling: 'mean', normalize: true }))
+                        .data as Float32Array
+                )
+                return { item, score: cosineSimilarity(jdEmbedding, emb) }
+            })
+        )
 
         const top5 = scored.sort((a, b) => b.score - a.score).slice(0, 5)
 

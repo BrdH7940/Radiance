@@ -6,7 +6,7 @@ user to the enhanced CV JSON, the PDF S3 key, and the matching score.
 """
 
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -42,6 +42,14 @@ class CVHistoryEntry(BaseModel):
     )
     pdf_s3_key: Optional[str] = Field(
         default=None, description="S3 object key of the rendered enhanced CV PDF."
+    )
+    missing_skills: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Skill gaps identified during analysis (SkillGapDTO list).",
+    )
+    red_flags: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Red flags identified during analysis (RedFlagDTO list).",
     )
     created_at: Optional[datetime] = Field(
         default=None, description="Populated by the database on insert."

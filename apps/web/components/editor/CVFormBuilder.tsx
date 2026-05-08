@@ -1,8 +1,11 @@
 'use client'
 
 import {
+    memo,
     useState,
     useCallback,
+    useEffect,
+    useRef,
     type ChangeEvent,
 } from 'react'
 import {
@@ -135,126 +138,202 @@ function Textarea({
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export function CVFormBuilder({ cvData, onChange, aiRecommendedProjectIndices = [] }: CVFormBuilderProps) {
+function CVFormBuilderInner({ cvData, onChange, aiRecommendedProjectIndices = [] }: CVFormBuilderProps) {
     const [expanded, setExpanded] = useState<Record<string, boolean>>({
         personal: true,
         summary: true,
     })
 
-    const toggle = (key: string) =>
-        setExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
+    // Keep a ref so all memoized handlers always read the latest cvData without
+    // needing to be recreated when cvData changes.
+    const cvDataRef = useRef(cvData)
+    useEffect(() => { cvDataRef.current = cvData }, [cvData])
 
+    const toggle = useCallback(
+        (key: string) => setExpanded((prev) => ({ ...prev, [key]: !prev[key] })),
+        []
+    )
+
+    // `update` only depends on `onChange` — stable as long as the parent memoizes it.
     const update = useCallback(
-        (patch: Partial<CVResumeSchema>) => onChange({ ...cvData, ...patch }),
-        [cvData, onChange]
+        (patch: Partial<CVResumeSchema>) => onChange({ ...cvDataRef.current, ...patch }),
+        [onChange]
     )
 
     // ── Personal Info ─────────────────────────────────────────────────────────
 
-    const updatePI = (field: string, value: string) =>
-        update({ personal_info: { ...cvData.personal_info, [field]: value } })
+    const updatePI = useCallback(
+        (field: string, value: string) =>
+            update({ personal_info: { ...cvDataRef.current.personal_info, [field]: value } }),
+        [update]
+    )
 
-    const updateLink = (i: number, field: keyof CVLink, value: string) => {
-        const links = [...cvData.personal_info.links]
-        links[i] = { ...links[i], [field]: value }
-        update({ personal_info: { ...cvData.personal_info, links } })
-    }
-    const addLink = () =>
-        update({ personal_info: { ...cvData.personal_info, links: [...cvData.personal_info.links, { label: '', url: '' }] } })
-    const removeLink = (i: number) =>
-        update({ personal_info: { ...cvData.personal_info, links: cvData.personal_info.links.filter((_, j) => j !== i) } })
+    const updateLink = useCallback(
+        (i: number, field: keyof CVLink, value: string) => {
+            const links = [...cvDataRef.current.personal_info.links]
+            links[i] = { ...links[i], [field]: value }
+            update({ personal_info: { ...cvDataRef.current.personal_info, links } })
+        },
+        [update]
+    )
+    const addLink = useCallback(
+        () => update({ personal_info: { ...cvDataRef.current.personal_info, links: [...cvDataRef.current.personal_info.links, { label: '', url: '' }] } }),
+        [update]
+    )
+    const removeLink = useCallback(
+        (i: number) => update({ personal_info: { ...cvDataRef.current.personal_info, links: cvDataRef.current.personal_info.links.filter((_, j) => j !== i) } }),
+        [update]
+    )
 
     // ── Summary ───────────────────────────────────────────────────────────────
 
-    const updateSummary = (text: string) =>
-        update({ summary: { text } })
+    const updateSummary = useCallback(
+        (text: string) => update({ summary: { text } }),
+        [update]
+    )
 
     // ── Experiences ───────────────────────────────────────────────────────────
 
-    const updateExp = (i: number, patch: Partial<CVExperience>) => {
-        const exps = [...cvData.experiences]
-        exps[i] = { ...exps[i], ...patch }
-        update({ experiences: exps })
-    }
-    const updateExpBullet = (ei: number, bi: number, val: string) => {
-        const bullets = [...cvData.experiences[ei].bullets]
-        bullets[bi] = val
-        updateExp(ei, { bullets })
-    }
-    const addExpBullet = (ei: number) =>
-        updateExp(ei, { bullets: [...cvData.experiences[ei].bullets, ''] })
-    const removeExpBullet = (ei: number, bi: number) =>
-        updateExp(ei, { bullets: cvData.experiences[ei].bullets.filter((_, j) => j !== bi) })
-    const addExp = () =>
-        update({ experiences: [...cvData.experiences, { company: '', role: '', date_range: '', bullets: [''] }] })
-    const removeExp = (i: number) =>
-        update({ experiences: cvData.experiences.filter((_, j) => j !== i) })
+    const updateExp = useCallback(
+        (i: number, patch: Partial<CVExperience>) => {
+            const exps = [...cvDataRef.current.experiences]
+            exps[i] = { ...exps[i], ...patch }
+            update({ experiences: exps })
+        },
+        [update]
+    )
+    const updateExpBullet = useCallback(
+        (ei: number, bi: number, val: string) => {
+            const bullets = [...cvDataRef.current.experiences[ei].bullets]
+            bullets[bi] = val
+            updateExp(ei, { bullets })
+        },
+        [updateExp]
+    )
+    const addExpBullet = useCallback(
+        (ei: number) => updateExp(ei, { bullets: [...cvDataRef.current.experiences[ei].bullets, ''] }),
+        [updateExp]
+    )
+    const removeExpBullet = useCallback(
+        (ei: number, bi: number) => updateExp(ei, { bullets: cvDataRef.current.experiences[ei].bullets.filter((_, j) => j !== bi) }),
+        [updateExp]
+    )
+    const addExp = useCallback(
+        () => update({ experiences: [...cvDataRef.current.experiences, { company: '', role: '', date_range: '', bullets: [''] }] }),
+        [update]
+    )
+    const removeExp = useCallback(
+        (i: number) => update({ experiences: cvDataRef.current.experiences.filter((_, j) => j !== i) }),
+        [update]
+    )
 
     // ── Education ─────────────────────────────────────────────────────────────
 
-    const updateEdu = (i: number, patch: Partial<CVEducation>) => {
-        const edus = [...cvData.education]
-        edus[i] = { ...edus[i], ...patch }
-        update({ education: edus })
-    }
-    const updateEduHonor = (ei: number, bi: number, val: string) => {
-        const honors = [...cvData.education[ei].honors]
-        honors[bi] = val
-        updateEdu(ei, { honors })
-    }
-    const addEduHonor = (ei: number) =>
-        updateEdu(ei, { honors: [...cvData.education[ei].honors, ''] })
-    const removeEduHonor = (ei: number, bi: number) =>
-        updateEdu(ei, { honors: cvData.education[ei].honors.filter((_, j) => j !== bi) })
-    const addEdu = () =>
-        update({ education: [...cvData.education, { institution: '', degree: '', major: '', start_date: '', end_date: '', location: null, gpa: null, honors: [] }] })
-    const removeEdu = (i: number) =>
-        update({ education: cvData.education.filter((_, j) => j !== i) })
+    const updateEdu = useCallback(
+        (i: number, patch: Partial<CVEducation>) => {
+            const edus = [...cvDataRef.current.education]
+            edus[i] = { ...edus[i], ...patch }
+            update({ education: edus })
+        },
+        [update]
+    )
+    const updateEduHonor = useCallback(
+        (ei: number, bi: number, val: string) => {
+            const honors = [...cvDataRef.current.education[ei].honors]
+            honors[bi] = val
+            updateEdu(ei, { honors })
+        },
+        [updateEdu]
+    )
+    const addEduHonor = useCallback(
+        (ei: number) => updateEdu(ei, { honors: [...cvDataRef.current.education[ei].honors, ''] }),
+        [updateEdu]
+    )
+    const removeEduHonor = useCallback(
+        (ei: number, bi: number) => updateEdu(ei, { honors: cvDataRef.current.education[ei].honors.filter((_, j) => j !== bi) }),
+        [updateEdu]
+    )
+    const addEdu = useCallback(
+        () => update({ education: [...cvDataRef.current.education, { institution: '', degree: '', major: '', start_date: '', end_date: '', location: null, gpa: null, honors: [] }] }),
+        [update]
+    )
+    const removeEdu = useCallback(
+        (i: number) => update({ education: cvDataRef.current.education.filter((_, j) => j !== i) }),
+        [update]
+    )
 
     // ── Projects ──────────────────────────────────────────────────────────────
 
-    const updateProj = (i: number, patch: Partial<CVProject>) => {
-        const projs = [...cvData.projects]
-        projs[i] = { ...projs[i], ...patch }
-        update({ projects: projs })
-    }
-    const updateProjDesc = (pi: number, bi: number, val: string) => {
-        const description = [...cvData.projects[pi].description]
-        description[bi] = val
-        updateProj(pi, { description })
-    }
-    const addProjDesc = (pi: number) =>
-        updateProj(pi, { description: [...cvData.projects[pi].description, ''] })
-    const removeProjDesc = (pi: number, bi: number) =>
-        updateProj(pi, { description: cvData.projects[pi].description.filter((_, j) => j !== bi) })
-    const addProj = () =>
-        update({ projects: [...cvData.projects, { name: '', role: '', tech_stack: [], start_date: '', end_date: '', link: null, description: [''] }] })
-    const removeProj = (i: number) =>
-        update({ projects: cvData.projects.filter((_, j) => j !== i) })
+    const updateProj = useCallback(
+        (i: number, patch: Partial<CVProject>) => {
+            const projs = [...cvDataRef.current.projects]
+            projs[i] = { ...projs[i], ...patch }
+            update({ projects: projs })
+        },
+        [update]
+    )
+    const updateProjDesc = useCallback(
+        (pi: number, bi: number, val: string) => {
+            const description = [...cvDataRef.current.projects[pi].description]
+            description[bi] = val
+            updateProj(pi, { description })
+        },
+        [updateProj]
+    )
+    const addProjDesc = useCallback(
+        (pi: number) => updateProj(pi, { description: [...cvDataRef.current.projects[pi].description, ''] }),
+        [updateProj]
+    )
+    const removeProjDesc = useCallback(
+        (pi: number, bi: number) => updateProj(pi, { description: cvDataRef.current.projects[pi].description.filter((_, j) => j !== bi) }),
+        [updateProj]
+    )
+    const addProj = useCallback(
+        () => update({ projects: [...cvDataRef.current.projects, { name: '', role: '', tech_stack: [], start_date: '', end_date: '', link: null, description: [''] }] }),
+        [update]
+    )
+    const removeProj = useCallback(
+        (i: number) => update({ projects: cvDataRef.current.projects.filter((_, j) => j !== i) }),
+        [update]
+    )
 
     // ── Skills ────────────────────────────────────────────────────────────────
 
-    const updateSkillGroup = (i: number, patch: Partial<CVSkillGroup>) => {
-        const sgs = [...cvData.skill_groups]
-        sgs[i] = { ...sgs[i], ...patch }
-        update({ skill_groups: sgs })
-    }
-    const addSkillGroup = () =>
-        update({ skill_groups: [...cvData.skill_groups, { category: '', skills: [] }] })
-    const removeSkillGroup = (i: number) =>
-        update({ skill_groups: cvData.skill_groups.filter((_, j) => j !== i) })
+    const updateSkillGroup = useCallback(
+        (i: number, patch: Partial<CVSkillGroup>) => {
+            const sgs = [...cvDataRef.current.skill_groups]
+            sgs[i] = { ...sgs[i], ...patch }
+            update({ skill_groups: sgs })
+        },
+        [update]
+    )
+    const addSkillGroup = useCallback(
+        () => update({ skill_groups: [...cvDataRef.current.skill_groups, { category: '', skills: [] }] }),
+        [update]
+    )
+    const removeSkillGroup = useCallback(
+        (i: number) => update({ skill_groups: cvDataRef.current.skill_groups.filter((_, j) => j !== i) }),
+        [update]
+    )
 
     // ── Awards & Certifications ───────────────────────────────────────────────
 
-    const updateAward = (i: number, patch: Partial<CVAwardsCertification>) => {
-        const aws = [...cvData.awards_certifications]
-        aws[i] = { ...aws[i], ...patch }
-        update({ awards_certifications: aws })
-    }
-    const addAward = () =>
-        update({ awards_certifications: [...cvData.awards_certifications, { title: '', link: null }] })
-    const removeAward = (i: number) =>
-        update({ awards_certifications: cvData.awards_certifications.filter((_, j) => j !== i) })
+    const updateAward = useCallback(
+        (i: number, patch: Partial<CVAwardsCertification>) => {
+            const aws = [...cvDataRef.current.awards_certifications]
+            aws[i] = { ...aws[i], ...patch }
+            update({ awards_certifications: aws })
+        },
+        [update]
+    )
+    const addAward = useCallback(
+        () => update({ awards_certifications: [...cvDataRef.current.awards_certifications, { title: '', link: null }] }),
+        [update]
+    )
+    const removeAward = useCallback(
+        (i: number) => update({ awards_certifications: cvDataRef.current.awards_certifications.filter((_, j) => j !== i) }),
+        [update]
+    )
 
     // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -710,3 +789,5 @@ export function CVFormBuilder({ cvData, onChange, aiRecommendedProjectIndices = 
         </div>
     )
 }
+
+export const CVFormBuilder = memo(CVFormBuilderInner)

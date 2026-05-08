@@ -24,6 +24,7 @@ import { renderCvToPdf, AnalysisService } from '@/services/api'
 import type { CVResumeSchema } from '@/services/api'
 import { getHistoryItem } from '@/services/historyApi'
 import { analyzeProjectsWithClientAI, type OnProgressCallback } from '@/services/aiClientService'
+import { useProjectGallery } from '@/hooks/useProjectGallery'
 
 // ─── Notification ─────────────────────────────────────────────────────────────
 
@@ -50,7 +51,6 @@ function WorkspacePageInner() {
     const view = searchParams.get('view')
 
     const {
-        user,
         cvData,
         setCvData,
         pdfUrl,
@@ -63,8 +63,6 @@ function WorkspacePageInner() {
         setAnalysisResult,
         setJobId,
         projectGallery,
-        galleryOwnerUserId,
-        setProjectGallery,
         galleryPhase,
         galleryLoadingStep,
         startGalleryAnalysis,
@@ -75,6 +73,9 @@ function WorkspacePageInner() {
         completeGallery,
         galleryError,
     } = useCVStore()
+
+    // Load (and cache) the project gallery — shared logic extracted to a hook.
+    useProjectGallery()
 
     // When the CV came from the gallery flow, mark all injected projects with the AI badge.
     // The strategic enhancer replaces the entire projects section, so all current projects
@@ -90,9 +91,20 @@ function WorkspacePageInner() {
     const [notifications, setNotifications] = useState<Notification[]>([])
     const notifIdRef = useRef(0)
 
+    // Debounced CV data for the preview panel — avoids re-rendering CVDocument on
+    // every single keystroke in the form builder (max ~7 re-renders/sec at 150 ms).
+    const [previewCvData, setPreviewCvData] = useState(cvData)
+    const previewDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+    // Sync preview when cvData changes from outside the form (e.g. gallery enhancement, history load).
+    useEffect(() => {
+        setPreviewCvData(cvData)
+    }, [cvData])
+
     const [leftPaneWidth, setLeftPaneWidth] = useState(48)
     const [isResizing, setIsResizing] = useState(false)
     const splitPaneRef = useRef<HTMLDivElement | null>(null)
+    const rafIdRef = useRef<number>(0)
 
     // History auto-load state — when arriving with `?id=` and no cvData, fetch first.
     const [historyLoading, setHistoryLoading] = useState<boolean>(
@@ -141,8 +153,8 @@ function WorkspacePageInner() {
                 setJdText(entry.jd_text ?? '')
                 setAnalysisResult({
                     matching_score: entry.matching_score ?? 0,
-                    missing_skills: [],
-                    red_flags: [],
+                    missing_skills: entry.missing_skills ?? [],
+                    red_flags: entry.red_flags ?? [],
                     enhanced_cv_json: entry.enhanced_cv_json as CVResumeSchema,
                     pdf_url: '',
                 })
@@ -179,48 +191,6 @@ function WorkspacePageInner() {
         if (historyId) return
         router.replace('/')
     }, [cvData, historyId, router])
-
-    // ── Lazy-load project gallery once we know the current user ───────────────
-
-    useEffect(() => {
-        const currentUserId = user?.id ?? null
-        if (!currentUserId) return
-        if (projectGallery.length > 0 && galleryOwnerUserId === currentUserId) return
-
-        const loadGallery = async () => {
-            try {
-                const { getSupabaseToken } = await import('@/services/api')
-                const token = await getSupabaseToken()
-                if (!token) return
-
-                const API_BASE =
-                    process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
-                const res = await fetch(`${API_BASE}/api/v1/projects`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                })
-                if (!res.ok) return
-
-                const data = (await res.json()) as Array<{
-                    id: string
-                    title: string
-                    description: string | null
-                    technologies: string[]
-                }>
-                setProjectGallery(
-                    data.map((p) => ({
-                        id: p.id,
-                        title: p.title,
-                        description: p.description,
-                        tech_stack: p.technologies,
-                    })),
-                    currentUserId
-                )
-            } catch {
-                // Non-fatal — gallery action will surface its own errors when invoked.
-            }
-        }
-        void loadGallery()
-    }, [user?.id, projectGallery.length, galleryOwnerUserId, setProjectGallery])
 
     // ── Poll for gallery job completion ────────────────────────────────────────
 
@@ -286,16 +256,23 @@ function WorkspacePageInner() {
     useEffect(() => {
         if (!isResizing) return
         const handleMouseMove = (event: MouseEvent) => {
-            const container = splitPaneRef.current
-            if (!container) return
-            const rect = container.getBoundingClientRect()
-            const pct = ((event.clientX - rect.left) / rect.width) * 100
-            setLeftPaneWidth(Math.max(30, Math.min(70, pct)))
+            cancelAnimationFrame(rafIdRef.current)
+            rafIdRef.current = requestAnimationFrame(() => {
+                const container = splitPaneRef.current
+                if (!container) return
+                const rect = container.getBoundingClientRect()
+                const pct = ((event.clientX - rect.left) / rect.width) * 100
+                setLeftPaneWidth(Math.max(30, Math.min(70, pct)))
+            })
         }
-        const handleMouseUp = () => setIsResizing(false)
+        const handleMouseUp = () => {
+            cancelAnimationFrame(rafIdRef.current)
+            setIsResizing(false)
+        }
         window.addEventListener('mousemove', handleMouseMove)
         window.addEventListener('mouseup', handleMouseUp)
         return () => {
+            cancelAnimationFrame(rafIdRef.current)
             window.removeEventListener('mousemove', handleMouseMove)
             window.removeEventListener('mouseup', handleMouseUp)
         }
@@ -308,6 +285,10 @@ function WorkspacePageInner() {
             setCvData(updated)
             // Clear cached PDF when data changes so preview stays in live mode
             if (pdfUrl) setPdfUrl('')
+            // Debounce preview re-renders — CVDocument is expensive to re-render
+            // on every keystroke; 150 ms gives ~7 fps which looks smooth.
+            if (previewDebounceRef.current) clearTimeout(previewDebounceRef.current)
+            previewDebounceRef.current = setTimeout(() => setPreviewCvData(updated), 150)
         },
         [setCvData, pdfUrl, setPdfUrl]
     )
@@ -656,7 +637,7 @@ function WorkspacePageInner() {
                 {/* Right — Preview */}
                 <div className="flex-1 flex flex-col min-w-0">
                     <CVPreview
-                        cvData={cvData}
+                        cvData={previewCvData}
                         pdfUrl={pdfUrl}
                         isRendering={isRendering}
                     />

@@ -3,6 +3,10 @@
  *
  * - AnalysisService: upload URL, S3 upload, trigger analysis, poll job status.
  * - Workspace: uploadAndAnalyze (orchestrated), renderCvToPdf.
+ *
+ * Job completion is delivered via Supabase Realtime broadcast on channel
+ * `job:<jobId>` (event: `status`). A polling fallback activates after
+ * REALTIME_TIMEOUT_MS if the Realtime channel is not reachable.
  */
 
 import { createClient } from '@/lib/supabase/client'
@@ -14,17 +18,29 @@ const API_BASE =
 
 // ─── Auth helper ──────────────────────────────────────────────────────────────
 
+// Cache the token for 50 seconds to avoid a Supabase round-trip on every
+// 2-second poll tick. Supabase tokens are valid for 1 hour so this is safe.
+let _cachedToken: string | null = null
+let _tokenExpiresAt = 0
+const TOKEN_CACHE_TTL_MS = 50_000
+
 /**
  * Returns the current Supabase access token, or null if not signed in.
- * Used to inject the Authorization header into authenticated API calls.
+ * Result is cached for 50 seconds to avoid repeated auth round-trips during
+ * long-running polling loops (e.g. job-status polling every 2 s).
  */
 export async function getSupabaseToken(): Promise<string | null> {
+    if (_cachedToken && Date.now() < _tokenExpiresAt) {
+        return _cachedToken
+    }
     try {
         const supabase = createClient()
         const {
             data: { session },
         } = await supabase.auth.getSession()
-        return session?.access_token ?? null
+        _cachedToken = session?.access_token ?? null
+        _tokenExpiresAt = _cachedToken ? Date.now() + TOKEN_CACHE_TTL_MS : 0
+        return _cachedToken
     } catch {
         return null
     }
@@ -293,8 +309,154 @@ export interface UploadAndAnalyzeResult {
     error: string | null
 }
 
-const POLL_INTERVAL_MS = 2000
-const MAX_POLL_ATTEMPTS = 300 // ~10 min
+// Maximum time to wait for the Realtime channel to deliver a status event
+// before falling back to HTTP polling. Covers cold-start Lambda latency.
+const REALTIME_TIMEOUT_MS = 600_000 // 10 min
+
+// Fallback polling used only when Realtime subscription fails to set up.
+const POLL_INTERVAL_MS = 3000
+const MAX_POLL_ATTEMPTS = 200 // ~10 min
+
+/**
+ * Wait for a job to finish using Supabase Realtime broadcast.
+ *
+ * The backend broadcasts `{ status, job_id }` on channel `job:<jobId>`
+ * (event: `status`) when the worker Lambda marks the job COMPLETED or FAILED.
+ * This avoids up to 300 HTTP round-trips and DynamoDB reads vs. polling.
+ *
+ * Falls back to HTTP polling if:
+ * - The Realtime subscription times out (REALTIME_TIMEOUT_MS).
+ * - The broadcast payload contains a terminal status but `result` must still
+ *   be fetched via REST (the broadcast only carries `status` + `job_id`).
+ */
+async function waitForJobViaRealtime(
+    jobId: string,
+    onStep?: OnStepCallback
+): Promise<UploadAndAnalyzeResult> {
+    return new Promise((resolve) => {
+        const supabase = createClient()
+        let settled = false
+
+        const cleanup = () => {
+            if (!settled) {
+                settled = true
+                supabase.removeAllChannels()
+            }
+        }
+
+        // Hard timeout — resolve with polling fallback if Realtime stalls.
+        const timeoutId = setTimeout(async () => {
+            cleanup()
+            resolve(await _pollUntilDone(jobId, onStep))
+        }, REALTIME_TIMEOUT_MS)
+
+        const channel = supabase
+            .channel(`job:${jobId}`)
+            .on(
+                'broadcast',
+                { event: 'status' },
+                async ({ payload }: { payload: { status: string; job_id: string } }) => {
+                    if (settled) return
+                    const { status } = payload
+
+                    if (status === 'completed' || status === 'failed') {
+                        clearTimeout(timeoutId)
+                        cleanup()
+                        onStep?.(4)
+
+                        // Fetch the full result via REST (broadcast carries status only).
+                        try {
+                            const statusResponse = await AnalysisService.pollJobStatus(jobId)
+                            if (status === 'completed' && statusResponse.result) {
+                                resolve({
+                                    jobId,
+                                    status: 'completed',
+                                    result: statusResponse.result,
+                                    error: null,
+                                })
+                            } else {
+                                resolve({
+                                    jobId,
+                                    status: 'failed',
+                                    result: null,
+                                    error: statusResponse.error || 'Analysis failed.',
+                                })
+                            }
+                        } catch (err) {
+                            resolve({
+                                jobId,
+                                status: 'failed',
+                                result: null,
+                                error: err instanceof Error ? err.message : 'Failed to fetch result.',
+                            })
+                        }
+                    }
+                }
+            )
+            .subscribe((subscribeStatus) => {
+                // If the channel fails to connect, fall back to polling immediately.
+                if (subscribeStatus === 'CHANNEL_ERROR' || subscribeStatus === 'TIMED_OUT') {
+                    if (settled) return
+                    clearTimeout(timeoutId)
+                    cleanup()
+                    _pollUntilDone(jobId, onStep).then(resolve)
+                }
+            })
+
+        // Suppress unused-variable warning; channel is kept alive via closure.
+        void channel
+    })
+}
+
+/** Pure HTTP polling fallback — used when Realtime is unavailable. */
+async function _pollUntilDone(
+    jobId: string,
+    onStep?: OnStepCallback
+): Promise<UploadAndAnalyzeResult> {
+    return new Promise((resolve) => {
+        let attempts = 0
+        const intervalId = setInterval(async () => {
+            attempts++
+            if (attempts > MAX_POLL_ATTEMPTS) {
+                clearInterval(intervalId)
+                resolve({
+                    jobId,
+                    status: 'failed',
+                    result: null,
+                    error: 'Analysis timed out. Please try again.',
+                })
+                return
+            }
+            try {
+                const statusResponse = await AnalysisService.pollJobStatus(jobId)
+                onStep?.(4)
+
+                if (statusResponse.status === 'completed' && statusResponse.result) {
+                    clearInterval(intervalId)
+                    resolve({ jobId, status: 'completed', result: statusResponse.result, error: null })
+                    return
+                }
+                if (statusResponse.status === 'failed') {
+                    clearInterval(intervalId)
+                    resolve({
+                        jobId,
+                        status: 'failed',
+                        result: null,
+                        error: statusResponse.error || 'Analysis failed.',
+                    })
+                }
+            } catch (err) {
+                clearInterval(intervalId)
+                resolve({
+                    jobId,
+                    status: 'failed',
+                    result: null,
+                    error: err instanceof Error ? err.message : 'Polling failed.',
+                })
+            }
+        }, POLL_INTERVAL_MS)
+    })
+}
 
 export async function uploadAndAnalyze(
     cvFile: File,
@@ -315,34 +477,7 @@ export async function uploadAndAnalyze(
     const { id: jobId } = await AnalysisService.triggerAnalysis(s3_key, jdText.trim())
     onStep?.(3)
 
-    return new Promise((resolve) => {
-        let attempts = 0
-        const intervalId = setInterval(async () => {
-            attempts++
-            if (attempts > MAX_POLL_ATTEMPTS) {
-                clearInterval(intervalId)
-                resolve({ jobId, status: 'failed', result: null, error: 'Analysis timed out. Please try again.' })
-                return
-            }
-            try {
-                const statusResponse = await AnalysisService.pollJobStatus(jobId)
-                onStep?.(4)
-
-                if (statusResponse.status === 'completed' && statusResponse.result) {
-                    clearInterval(intervalId)
-                    resolve({ jobId, status: 'completed', result: statusResponse.result, error: null })
-                    return
-                }
-                if (statusResponse.status === 'failed') {
-                    clearInterval(intervalId)
-                    resolve({ jobId, status: 'failed', result: null, error: statusResponse.error || 'Analysis failed.' })
-                }
-            } catch (err) {
-                clearInterval(intervalId)
-                resolve({ jobId, status: 'failed', result: null, error: err instanceof Error ? err.message : 'Polling failed.' })
-            }
-        }, POLL_INTERVAL_MS)
-    })
+    return waitForJobViaRealtime(jobId, onStep)
 }
 
 // ─── Workspace / editor APIs ──────────────────────────────────────────────────
