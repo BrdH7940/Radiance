@@ -12,13 +12,18 @@ import {
     AlertCircle,
     SplitSquareHorizontal,
     Sparkles,
+    BookMarked,
+    Loader2,
 } from 'lucide-react'
 import { NavBar } from '@/components/ui/NavBar'
 import { CVFormBuilder } from '@/components/editor/CVFormBuilder'
 import { CVPreview } from '@/components/editor/CVPreview'
+import { ProjectSelectionHub } from '@/components/dashboard/ProjectSelectionHub'
 import { useCVStore } from '@/store/useCVStore'
-import { renderCvToPdf } from '@/services/api'
+import { renderCvToPdf, AnalysisService } from '@/services/api'
 import type { CVResumeSchema } from '@/services/api'
+import { getHistoryItem } from '@/services/historyApi'
+import { analyzeProjectsWithClientAI, type OnProgressCallback } from '@/services/aiClientService'
 
 // ─── Notification ─────────────────────────────────────────────────────────────
 
@@ -30,6 +35,12 @@ interface Notification {
     type: NotificationType
 }
 
+const GALLERY_STEP_LABELS: Record<0 | 1 | 2, string> = {
+    0: 'Starting AI analysis…',
+    1: 'Step 1/2: Ranking Projects…',
+    2: 'Step 2/2: Generating AI Reasoning…',
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 function WorkspacePageInner() {
@@ -38,6 +49,7 @@ function WorkspacePageInner() {
     const historyId = searchParams.get('id')
 
     const {
+        user,
         cvData,
         setCvData,
         pdfUrl,
@@ -45,6 +57,22 @@ function WorkspacePageInner() {
         setPhase,
         setInputReviewMode,
         selectedProjectIds,
+        jdText,
+        setJdText,
+        setAnalysisResult,
+        setJobId,
+        projectGallery,
+        galleryOwnerUserId,
+        setProjectGallery,
+        galleryPhase,
+        galleryLoadingStep,
+        startGalleryAnalysis,
+        consultGallery,
+        setGalleryError,
+        setGalleryLoadingStep,
+        resetGallery,
+        completeGallery,
+        galleryError,
     } = useCVStore()
 
     // When the CV came from the gallery flow, mark all injected projects with the AI badge.
@@ -65,11 +93,14 @@ function WorkspacePageInner() {
     const [isResizing, setIsResizing] = useState(false)
     const splitPaneRef = useRef<HTMLDivElement | null>(null)
 
-    // ── Guard ─────────────────────────────────────────────────────────────────
+    // History auto-load state — when arriving with `?id=` and no cvData, fetch first.
+    const [historyLoading, setHistoryLoading] = useState<boolean>(
+        Boolean(historyId) && !cvData
+    )
+    const [historyError, setHistoryError] = useState<string | null>(null)
 
-    useEffect(() => {
-        if (!cvData) router.replace('/')
-    }, [cvData, router])
+    // Gallery FSM job-polling
+    const [galleryJobId, setGalleryJobId] = useState<string | null>(null)
 
     // ── Notification helpers ──────────────────────────────────────────────────
 
@@ -85,6 +116,150 @@ function WorkspacePageInner() {
         },
         []
     )
+
+    // ── Auto-load from history when `?id=` is present and store is empty ──────
+
+    useEffect(() => {
+        if (cvData || !historyId) return
+
+        let cancelled = false
+        const load = async () => {
+            setHistoryLoading(true)
+            setHistoryError(null)
+            try {
+                const entry = await getHistoryItem(historyId)
+                if (cancelled) return
+                if (!entry.enhanced_cv_json) {
+                    setHistoryError(
+                        'This history entry has no editable CV data. It may have been created before the editor was enabled.'
+                    )
+                    return
+                }
+                setCvData(entry.enhanced_cv_json as CVResumeSchema)
+                setPdfUrl('')
+                setJdText(entry.jd_text ?? '')
+                setAnalysisResult({
+                    matching_score: entry.matching_score ?? 0,
+                    missing_skills: [],
+                    red_flags: [],
+                    enhanced_cv_json: entry.enhanced_cv_json as CVResumeSchema,
+                    pdf_url: '',
+                })
+                setPhase('workspace')
+            } catch (err: unknown) {
+                if (cancelled) return
+                setHistoryError(
+                    err instanceof Error
+                        ? err.message
+                        : 'Failed to load history entry.'
+                )
+            } finally {
+                if (!cancelled) setHistoryLoading(false)
+            }
+        }
+        void load()
+        return () => {
+            cancelled = true
+        }
+    }, [
+        cvData,
+        historyId,
+        setCvData,
+        setPdfUrl,
+        setJdText,
+        setAnalysisResult,
+        setPhase,
+    ])
+
+    // ── Guard: if we have no cvData and no historyId, send the user home ──────
+
+    useEffect(() => {
+        if (cvData) return
+        if (historyId) return
+        router.replace('/')
+    }, [cvData, historyId, router])
+
+    // ── Lazy-load project gallery once we know the current user ───────────────
+
+    useEffect(() => {
+        const currentUserId = user?.id ?? null
+        if (!currentUserId) return
+        if (projectGallery.length > 0 && galleryOwnerUserId === currentUserId) return
+
+        const loadGallery = async () => {
+            try {
+                const { getSupabaseToken } = await import('@/services/api')
+                const token = await getSupabaseToken()
+                if (!token) return
+
+                const API_BASE =
+                    process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+                const res = await fetch(`${API_BASE}/api/v1/projects`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                })
+                if (!res.ok) return
+
+                const data = (await res.json()) as Array<{
+                    id: string
+                    title: string
+                    description: string | null
+                    technologies: string[]
+                }>
+                setProjectGallery(
+                    data.map((p) => ({
+                        id: p.id,
+                        title: p.title,
+                        description: p.description,
+                        tech_stack: p.technologies,
+                    })),
+                    currentUserId
+                )
+            } catch {
+                // Non-fatal — gallery action will surface its own errors when invoked.
+            }
+        }
+        void loadGallery()
+    }, [user?.id, projectGallery.length, galleryOwnerUserId, setProjectGallery])
+
+    // ── Poll for gallery job completion ────────────────────────────────────────
+
+    useEffect(() => {
+        if (!galleryJobId || galleryPhase !== 'FINALIZING') return
+
+        const intervalId = setInterval(async () => {
+            try {
+                const statusResponse = await AnalysisService.pollJobStatus(galleryJobId)
+                if (statusResponse.status === 'completed' && statusResponse.result) {
+                    clearInterval(intervalId)
+                    setCvData(statusResponse.result.enhanced_cv_json)
+                    setPdfUrl(statusResponse.result.pdf_url)
+                    setPhase('workspace')
+                    setGalleryJobId(null)
+                    completeGallery()
+                    showNotification('Strategic CV generated.', 'success')
+                } else if (statusResponse.status === 'failed') {
+                    clearInterval(intervalId)
+                    setGalleryError(
+                        statusResponse.error ?? 'Gallery enhancement failed.'
+                    )
+                }
+            } catch {
+                clearInterval(intervalId)
+                setGalleryError('Failed to poll gallery job status.')
+            }
+        }, 2000)
+
+        return () => clearInterval(intervalId)
+    }, [
+        galleryJobId,
+        galleryPhase,
+        setCvData,
+        setPdfUrl,
+        setPhase,
+        setGalleryError,
+        completeGallery,
+        showNotification,
+    ])
 
     // ── Split-pane resize ─────────────────────────────────────────────────────
 
@@ -177,6 +352,60 @@ function WorkspacePageInner() {
         }
     }, [pdfUrl, showNotification])
 
+    // ── Strategic Gallery flow (mirrors dashboard/page.tsx) ───────────────────
+
+    const galleryRequiresJd =
+        !jdText || jdText.trim().length < 50
+    const galleryDisabled =
+        galleryRequiresJd || projectGallery.length === 0 || galleryPhase !== 'IDLE'
+
+    const handleOptimizeWithGallery = useCallback(async () => {
+        if (galleryRequiresJd) {
+            showNotification(
+                'No job description on file for this entry — cannot run gallery analysis.',
+                'error'
+            )
+            return
+        }
+        if (projectGallery.length === 0) {
+            showNotification(
+                'Add projects to your Gallery first to use Strategic Mode.',
+                'error'
+            )
+            return
+        }
+
+        startGalleryAnalysis()
+
+        const onProgress: OnProgressCallback = (step) => {
+            setGalleryLoadingStep(step)
+        }
+
+        try {
+            const results = await analyzeProjectsWithClientAI(
+                jdText,
+                projectGallery,
+                onProgress
+            )
+            consultGallery(results)
+        } catch (err) {
+            setGalleryError(
+                err instanceof Error
+                    ? err.message
+                    : 'AI analysis failed. Please try again.'
+            )
+        }
+    }, [
+        galleryRequiresJd,
+        projectGallery,
+        jdText,
+        startGalleryAnalysis,
+        consultGallery,
+        setGalleryError,
+        setGalleryLoadingStep,
+        showNotification,
+    ])
+
     const handleStepClick = useCallback(
         (step: number) => {
             if (historyId) {
@@ -209,6 +438,36 @@ function WorkspacePageInner() {
     )
 
     // ── Render ────────────────────────────────────────────────────────────────
+
+    if (historyLoading) {
+        return (
+            <div className="h-screen flex items-center justify-center bg-[#FBFBF9] text-[#1C293C]">
+                <div className="rounded-none border-4 border-black bg-[#FBFBF9] p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] text-center max-w-sm">
+                    <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3 text-[#1C293C]" />
+                    <p className="font-bold text-sm">Loading your history entry…</p>
+                </div>
+            </div>
+        )
+    }
+
+    if (historyError) {
+        return (
+            <div className="h-screen flex items-center justify-center bg-[#FBFBF9] text-[#1C293C] px-6">
+                <div className="rounded-none border-4 border-black bg-[#FBFBF9] p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] text-center max-w-sm">
+                    <AlertCircle className="w-8 h-8 mx-auto mb-3 text-red-500" />
+                    <p className="font-bold text-sm mb-1">Could not load history</p>
+                    <p className="text-xs text-[#4B5563] mb-4">{historyError}</p>
+                    <button
+                        type="button"
+                        onClick={() => router.push('/dashboard/history')}
+                        className="px-4 py-2 rounded-none border-2 border-black bg-[#FDC800] text-sm font-bold text-[#1C293C] hover:opacity-80 transition-opacity"
+                    >
+                        Back to History
+                    </button>
+                </div>
+            </div>
+        )
+    }
 
     if (!cvData) return null
 
@@ -247,6 +506,23 @@ function WorkspacePageInner() {
                 <div className="flex-1" />
 
                 <div className="flex items-center gap-2">
+                    {/* Optimize with Project Gallery */}
+                    <button
+                        onClick={handleOptimizeWithGallery}
+                        disabled={galleryDisabled}
+                        title={
+                            galleryRequiresJd
+                                ? 'No job description available for this entry'
+                                : projectGallery.length === 0
+                                  ? 'Add projects to your Gallery first'
+                                  : 'Re-rank your projects against this job and inject the best ones'
+                        }
+                        className="flex items-center gap-1.5 px-4 py-1.5 rounded-none text-xs font-semibold border-4 border-black bg-[#432DD7] text-white hover:bg-[#5840E0] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[3px] hover:translate-y-[3px]"
+                    >
+                        <BookMarked className="w-3.5 h-3.5" />
+                        <span className="hidden lg:inline">Optimize with</span> Gallery
+                    </button>
+
                     {/* Sync Changes / Render PDF */}
                     <button
                         onClick={handleRenderPdf}
@@ -327,6 +603,21 @@ function WorkspacePageInner() {
                 </div>
             </div>
 
+            {/* ── Gallery FSM overlay ─────────────────────────────────────────── */}
+            <GalleryOverlay
+                galleryPhase={galleryPhase}
+                galleryLoadingStep={galleryLoadingStep}
+                galleryError={galleryError}
+                onJobQueued={(jobId) => {
+                    setGalleryJobId(jobId)
+                    setJobId(jobId)
+                }}
+                onClose={() => {
+                    resetGallery()
+                    setGalleryJobId(null)
+                }}
+            />
+
             {/* ── Toast notifications ─────────────────────────────────────────── */}
             <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 pointer-events-none">
                 {notifications.map((n) => (
@@ -350,6 +641,106 @@ function WorkspacePageInner() {
                         {n.message}
                     </div>
                 ))}
+            </div>
+        </div>
+    )
+}
+
+// ─── Gallery overlay ──────────────────────────────────────────────────────────
+
+interface GalleryOverlayProps {
+    galleryPhase: ReturnType<typeof useCVStore.getState>['galleryPhase']
+    galleryLoadingStep: 0 | 1 | 2
+    galleryError: string
+    onJobQueued: (jobId: string) => void
+    onClose: () => void
+}
+
+function GalleryOverlay({
+    galleryPhase,
+    galleryLoadingStep,
+    galleryError,
+    onJobQueued,
+    onClose,
+}: GalleryOverlayProps) {
+    if (galleryPhase === 'IDLE') return null
+
+    return (
+        <div className="fixed inset-0 z-40 flex items-start justify-center bg-black/40 backdrop-blur-sm overflow-y-auto">
+            <div className="my-10 mx-4 w-full max-w-3xl rounded-none border-4 border-black bg-[#FBFBF9] shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-6">
+                {galleryPhase === 'ANALYZING' && (
+                    <div className="flex flex-col items-center justify-center py-10 gap-6">
+                        <div className="rounded-none border-4 border-black bg-[#FDC800] p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] text-center max-w-sm w-full">
+                            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3 text-[#1C293C]" />
+                            <p className="font-bold text-[#1C293C] text-sm">
+                                {GALLERY_STEP_LABELS[galleryLoadingStep]}
+                            </p>
+                            <p className="text-xs text-[#1C293C]/70 mt-1">
+                                Running locally in your browser — no API cost
+                            </p>
+                        </div>
+                        <div className="flex flex-col gap-2 w-full max-w-sm">
+                            {([1, 2] as const).map((step) => (
+                                <div
+                                    key={step}
+                                    className={`flex items-center gap-3 text-sm transition-opacity duration-300 ${
+                                        galleryLoadingStep >= step
+                                            ? 'opacity-100'
+                                            : 'opacity-30'
+                                    }`}
+                                >
+                                    <div
+                                        className={`w-6 h-6 rounded-none border-2 border-black flex items-center justify-center text-xs font-bold ${
+                                            galleryLoadingStep > step
+                                                ? 'bg-green-400'
+                                                : galleryLoadingStep === step
+                                                  ? 'bg-[#FDC800] animate-pulse'
+                                                  : 'bg-[#FBFBF9]'
+                                        }`}
+                                    >
+                                        {galleryLoadingStep > step ? '✓' : step}
+                                    </div>
+                                    <span className="text-[#1C293C]">
+                                        {GALLERY_STEP_LABELS[step]}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {galleryPhase === 'CONSULTING_GALLERY' && (
+                    <ProjectSelectionHub onJobQueued={onJobQueued} />
+                )}
+
+                {galleryPhase === 'FINALIZING' && (
+                    <div className="flex flex-col items-center justify-center py-12 gap-4">
+                        <Loader2 className="w-8 h-8 animate-spin text-[#1C293C]" />
+                        <p className="font-bold text-[#1C293C] text-sm">
+                            Generating your strategic CV…
+                        </p>
+                        <p className="text-xs text-[#4B5563]">
+                            Gemini is rewriting your CV with the selected projects.
+                        </p>
+                    </div>
+                )}
+
+                {galleryPhase === 'ERROR' && (
+                    <div className="flex flex-col items-center justify-center py-12 gap-4 text-center">
+                        <AlertCircle className="w-8 h-8 text-red-500" />
+                        <p className="font-bold text-[#1C293C] text-sm">
+                            Something went wrong
+                        </p>
+                        <p className="text-xs text-[#4B5563] max-w-sm">{galleryError}</p>
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="mt-2 px-4 py-2 rounded-none border-2 border-black bg-[#FDC800] text-sm font-bold text-[#1C293C] hover:opacity-80 transition-opacity"
+                        >
+                            Dismiss
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
     )

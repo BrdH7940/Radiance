@@ -49,9 +49,16 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 
-async function apiRequest<T>(path: string): Promise<T> {
+async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
     const headers = await getAuthHeaders()
-    const res = await fetch(`${API_BASE}${path}`, { headers })
+    const res = await fetch(`${API_BASE}${path}`, {
+        ...init,
+        headers: { ...headers, ...(init?.headers as Record<string, string> | undefined) },
+    })
+
+    if (res.status === 204) {
+        return undefined as T
+    }
 
     const data = await readApiJson<unknown>(res)
     if (!res.ok) {
@@ -68,4 +75,23 @@ export async function getHistory(): Promise<CVHistorySummary[]> {
 
 export async function getHistoryItem(historyId: string): Promise<CVHistoryEntry> {
     return apiRequest<CVHistoryEntry>(`/api/v1/history/${historyId}`)
+}
+
+export interface UpdateHistoryPayload {
+    job_title?: string | null
+    company_name?: string | null
+}
+
+export async function updateHistoryItem(
+    historyId: string,
+    payload: UpdateHistoryPayload
+): Promise<CVHistoryEntry> {
+    return apiRequest<CVHistoryEntry>(`/api/v1/history/${historyId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+    })
+}
+
+export async function deleteHistoryItem(historyId: string): Promise<void> {
+    await apiRequest<void>(`/api/v1/history/${historyId}`, { method: 'DELETE' })
 }

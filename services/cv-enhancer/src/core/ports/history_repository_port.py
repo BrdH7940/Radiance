@@ -47,3 +47,28 @@ class IHistoryRepository(ABC):
             entry: CVHistoryEntry to insert (id and created_at may be None; DB assigns them).
         """
         ...
+
+    @abstractmethod
+    async def update(
+        self,
+        user_id: str,
+        history_id: UUID,
+        *,
+        job_title: Optional[str] = None,
+        company_name: Optional[str] = None,
+    ) -> Optional[CVHistoryEntry]:
+        """Update editable metadata fields on an existing history entry.
+
+        Only the fields that are not None are written. Returns the updated entry,
+        or None when the row does not exist or is not owned by the user.
+        """
+        ...
+
+    @abstractmethod
+    async def delete(self, user_id: str, history_id: UUID) -> bool:
+        """Delete a history entry owned by the given user.
+
+        Returns:
+            True when a row was deleted, False when no row was found / not owned.
+        """
+        ...

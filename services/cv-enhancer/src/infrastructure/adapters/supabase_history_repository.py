@@ -86,3 +86,62 @@ class SupabaseHistoryRepository(IHistoryRepository):
                 "Failed to save CV history for user '%s': %s", entry.user_id, exc
             )
             raise
+
+    async def update(
+        self,
+        user_id: str,
+        history_id: UUID,
+        *,
+        job_title: Optional[str] = None,
+        company_name: Optional[str] = None,
+    ) -> Optional[CVHistoryEntry]:
+        """Update editable metadata (job_title / company_name) on an entry."""
+        payload: dict = {}
+        if job_title is not None:
+            payload["job_title"] = job_title
+        if company_name is not None:
+            payload["company_name"] = company_name
+
+        if not payload:
+            # Nothing to update — fetch and return current state.
+            return await self.get_by_id(user_id, history_id)
+
+        try:
+            response = (
+                self._client.table(_TABLE)
+                .update(payload)
+                .eq("id", str(history_id))
+                .eq("user_id", user_id)
+                .execute()
+            )
+            if not response.data:
+                return None
+            return CVHistoryEntry(**response.data[0])
+        except Exception as exc:
+            logger.error(
+                "Failed to update history entry '%s' for user '%s': %s",
+                history_id,
+                user_id,
+                exc,
+            )
+            raise
+
+    async def delete(self, user_id: str, history_id: UUID) -> bool:
+        """Delete a history row owned by the given user. Returns True on success."""
+        try:
+            response = (
+                self._client.table(_TABLE)
+                .delete()
+                .eq("id", str(history_id))
+                .eq("user_id", user_id)
+                .execute()
+            )
+            return bool(response.data)
+        except Exception as exc:
+            logger.error(
+                "Failed to delete history entry '%s' for user '%s': %s",
+                history_id,
+                user_id,
+                exc,
+            )
+            raise

@@ -82,6 +82,12 @@ export interface CVStore {
     finalizeGallery: () => void
     /** Any → IDLE. Clears all gallery state; call when user goes back / changes JD. */
     resetGallery: () => void
+    /**
+     * FINALIZING → IDLE. Closes the gallery FSM after a successful enhancement
+     * while preserving `selectedProjectIds` so the Strategic Mode badge and
+     * AI-injected project indicators remain visible in the editor.
+     */
+    completeGallery: () => void
     /** Any → ERROR. Stores the error message for display. */
     setGalleryError: (message: string) => void
     /** Populate `projectGallery` from the API (called once on dashboard mount). */
@@ -205,6 +211,13 @@ export const useCVStore = create<CVStore>((set) => ({
             galleryLoadingStep: 0,
             recommendedProjects: [],
             selectedProjectIds: [],
+            galleryError: '',
+        }),
+
+    completeGallery: () =>
+        set({
+            galleryPhase: 'IDLE',
+            galleryLoadingStep: 0,
             galleryError: '',
         }),
 
