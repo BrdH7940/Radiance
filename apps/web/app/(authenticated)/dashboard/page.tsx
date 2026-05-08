@@ -29,6 +29,9 @@ const GALLERY_STEP_LABELS: Record<0 | 1 | 2, string> = {
     2: 'Step 2/2: Generating AI Reasoning…',
 }
 
+const GALLERY_POLL_INTERVAL_MS = 2000
+const MAX_GALLERY_POLL_ATTEMPTS = 300 // ~10 minutes
+
 export default function EnhanceCVPage() {
     const router = useRouter()
     const {
@@ -108,7 +111,17 @@ export default function EnhanceCVPage() {
     useEffect(() => {
         if (!galleryJobId || galleryPhase !== 'FINALIZING') return
 
+        let attempts = 0
         const intervalId = setInterval(async () => {
+            attempts++
+            if (attempts > MAX_GALLERY_POLL_ATTEMPTS) {
+                clearInterval(intervalId)
+                setGalleryError(
+                    'Strategic CV generation timed out. Please try again.'
+                )
+                return
+            }
+
             try {
                 const statusResponse = await AnalysisService.pollJobStatus(galleryJobId)
                 if (statusResponse.status === 'completed' && statusResponse.result) {
@@ -125,7 +138,7 @@ export default function EnhanceCVPage() {
                 clearInterval(intervalId)
                 setGalleryError('Failed to poll gallery job status.')
             }
-        }, 2000)
+        }, GALLERY_POLL_INTERVAL_MS)
 
         return () => clearInterval(intervalId)
     }, [galleryJobId, galleryPhase, setCvData, setPdfUrl, setPhase, setGalleryError, router])

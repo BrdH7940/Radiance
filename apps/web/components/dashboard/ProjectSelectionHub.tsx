@@ -94,12 +94,12 @@ export function ProjectSelectionHub({ onJobQueued }: ProjectSelectionHubProps) {
                 return
             }
 
-            finalizeGallery()
             const response = await enhanceFromGallery({
                 cv_text: cvText,
                 jd_text: jdText,
                 client_results: verifiedClientResults,
             })
+            finalizeGallery()
             onJobQueued(response.id)
         } catch (err) {
             setGalleryError(formatEnhanceFromGalleryError(err))

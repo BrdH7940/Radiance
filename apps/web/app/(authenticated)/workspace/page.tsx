@@ -227,7 +227,18 @@ function WorkspacePageInner() {
     useEffect(() => {
         if (!galleryJobId || galleryPhase !== 'FINALIZING') return
 
+        const POLL_INTERVAL_MS = 2000
+        const MAX_POLL_ATTEMPTS = 300 // ~10 minutes
+        let attempts = 0
+
         const intervalId = setInterval(async () => {
+            attempts++
+            if (attempts > MAX_POLL_ATTEMPTS) {
+                clearInterval(intervalId)
+                setGalleryError('Strategic CV generation timed out. Please try again.')
+                return
+            }
+
             try {
                 const statusResponse = await AnalysisService.pollJobStatus(galleryJobId)
                 if (statusResponse.status === 'completed' && statusResponse.result) {
@@ -248,7 +259,7 @@ function WorkspacePageInner() {
                 clearInterval(intervalId)
                 setGalleryError('Failed to poll gallery job status.')
             }
-        }, 2000)
+        }, POLL_INTERVAL_MS)
 
         return () => clearInterval(intervalId)
     }, [
