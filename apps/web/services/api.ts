@@ -408,6 +408,9 @@ async function waitForJobViaRealtime(
     })
 }
 
+// Number of consecutive network errors before polling gives up.
+const MAX_CONSECUTIVE_ERRORS = 3
+
 /** Pure HTTP polling fallback — used when Realtime is unavailable. */
 async function _pollUntilDone(
     jobId: string,
@@ -415,6 +418,7 @@ async function _pollUntilDone(
 ): Promise<UploadAndAnalyzeResult> {
     return new Promise((resolve) => {
         let attempts = 0
+        let consecutiveErrors = 0
         const intervalId = setInterval(async () => {
             attempts++
             if (attempts > MAX_POLL_ATTEMPTS) {
@@ -429,6 +433,7 @@ async function _pollUntilDone(
             }
             try {
                 const statusResponse = await AnalysisService.pollJobStatus(jobId)
+                consecutiveErrors = 0
                 onStep?.(4)
 
                 if (statusResponse.status === 'completed' && statusResponse.result) {
@@ -446,13 +451,17 @@ async function _pollUntilDone(
                     })
                 }
             } catch (err) {
-                clearInterval(intervalId)
-                resolve({
-                    jobId,
-                    status: 'failed',
-                    result: null,
-                    error: err instanceof Error ? err.message : 'Polling failed.',
-                })
+                consecutiveErrors++
+                if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+                    clearInterval(intervalId)
+                    resolve({
+                        jobId,
+                        status: 'failed',
+                        result: null,
+                        error: err instanceof Error ? err.message : 'Polling failed.',
+                    })
+                }
+                // else: transient network error — silently retry on next interval
             }
         }, POLL_INTERVAL_MS)
     })

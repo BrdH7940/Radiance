@@ -284,6 +284,8 @@ Step 4 → on terminal status, fetch once via pollJobStatus() to retrieve the fu
 
 Returns `{ jobId, status, result, error }`.
 
+**Realtime → polling fallback:** If the Realtime subscription times out (`REALTIME_TIMEOUT_MS = 600 000 ms`) or the channel errors (`CHANNEL_ERROR` / `TIMED_OUT`), `_pollUntilDone()` activates automatically. The polling fallback tolerates up to **3 consecutive network errors** (`MAX_CONSECUTIVE_ERRORS`) before resolving as `failed` — a single transient blip is silently retried on the next interval.
+
 #### Gallery APIs
 
 ```typescript
@@ -466,6 +468,12 @@ Props: `cvData: CVResumeSchema`, `pdfUrl: string`, `isRendering: boolean`
 Monaco Editor wrapper for raw JSON editing of `cvData`. Provides syntax highlighting, validation, and IntelliSense for `CVResumeSchema`.
 
 ### UI Components
+
+#### `PDFPreview` (`components/ui/PDFPreview.tsx`)
+
+LaTeX-based CV preview used alongside the Monaco editor. `parseLatex()` extracts name, email, LinkedIn, GitHub, and **location** (via regex for common LaTeX header patterns — falls back to `''` rather than a hardcoded placeholder city). When `pdfUrl` is provided, switches to an `<iframe>` showing the compiled PDF.
+
+Props: `latexCode: string`, `pdfUrl?: string`, `isCompiling?: boolean`, `onTextDoubleClick?: (info) => void`
 
 #### `CVDropzone`
 

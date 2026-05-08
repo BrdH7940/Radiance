@@ -42,6 +42,30 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+
+async def _run_in_process_job(
+    use_case: "AnalyzeCVUseCase",
+    job_id: str,
+    s3_key: str,
+    jd_text: str,
+) -> None:
+    """Wrapper for in-process background tasks that ensures exceptions are logged.
+
+    asyncio.create_task() silently drops exceptions from fire-and-forget coroutines.
+    This wrapper catches and logs any error so it surfaces in Lambda/CloudWatch logs.
+    """
+    try:
+        await use_case.execute(job_id=job_id, s3_key=s3_key, jd_text=jd_text)
+    except Exception as exc:
+        logger.error(
+            "In-process analysis job '%s' failed: %s", job_id, exc, exc_info=True
+        )
+
+
+# ---------------------------------------------------------------------------
 # Request / Response DTOs
 # ---------------------------------------------------------------------------
 
@@ -160,7 +184,7 @@ async def create_analysis(
         # Local-dev convenience: process the job inside the running API process.
         # The frontend still polls GET /api/v1/analyses/{id} the same way.
         asyncio.create_task(
-            use_case.execute(job_id=job_id, s3_key=payload.s3_key, jd_text=payload.jd_text)
+            _run_in_process_job(use_case, job_id, payload.s3_key, payload.jd_text)
         )
         logger.info(
             "Analysis job '%s' scheduled in-process for user '%s' (IN_PROCESS_WORKER=1).",
@@ -168,7 +192,7 @@ async def create_analysis(
             user_id,
         )
     else:
-        sqs_service.send_job(job_id, payload.s3_key, payload.jd_text)
+        await asyncio.to_thread(sqs_service.send_job, job_id, payload.s3_key, payload.jd_text)
 
     logger.info(
         "Analysis job '%s' queued for user '%s', S3 key '%s'.",
@@ -298,11 +322,12 @@ async def enhance_from_gallery(
     )
     await job_repo.save(job)
 
-    sqs_service.send_gallery_job(
-        job_id=job_id,
-        cv_text=payload.cv_text,
-        jd_text=payload.jd_text,
-        verified_projects=trusted_project_dicts,
+    await asyncio.to_thread(
+        sqs_service.send_gallery_job,
+        job_id,
+        payload.cv_text,
+        payload.jd_text,
+        trusted_project_dicts,
     )
 
     logger.info(

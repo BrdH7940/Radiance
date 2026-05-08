@@ -119,7 +119,13 @@ function parseLatex(latex: string): ParsedCV {
     const linkedin = linkedinMatch?.[1] ? `linkedin/in/${linkedinMatch[1]}` : ''
     const githubMatch = latex.match(/github\.com\/([^\}]+)\}/)
     const github = githubMatch?.[1] ? `github/${githubMatch[1]}` : ''
-    const location = 'San Francisco, CA'
+
+    // Try common LaTeX CV header patterns for location (e.g. "City, ST" or "City, Country").
+    // Falls back to empty string — never hardcode a placeholder city.
+    const location =
+        latex.match(/\\small\s+([A-Za-z][^\\$\n|{}]+,\s*[A-Za-z]{2,})\s*(?:\$\s*\\?\|?\s*\$|\\hfill|\\\\|$)/m)?.[1]?.trim() ??
+        latex.match(/\{\\small\s*([^}]+,\s*[^}]+)\}/)?.[1]?.trim() ??
+        ''
 
     // Split by \section{...}
     const parts = latex.split(/\\section\{([^}]+)\}/)

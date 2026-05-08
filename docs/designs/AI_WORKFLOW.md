@@ -288,6 +288,8 @@ Lambda Worker exception
                                (permanent errors, schema violations)
 ```
 
+**Double-execute prevention:** X-Ray annotations (`annotate_kv`) run in a separate `try/except` block *before* `use_case.execute()`. If annotation fails for any reason, `execute()` still runs exactly once — observability failure can never cause the pipeline to run twice.
+
 ### Job Status Propagation
 
 ```
@@ -295,9 +297,18 @@ AnalyzeCVUseCase.execute():
     Step 1–7 exception → job.status = FAILED, job.error = str(exc)
     Step 8 exception   → WARNING log only (non-critical history save)
 
-Frontend polling:
+Frontend (Realtime-first):
+    subscribe Supabase Realtime channel job:<jobId>
+    ├── broadcast received → fetch GET /analyses/{jobId} once for full payload
+    ├── CHANNEL_ERROR / TIMED_OUT → fallback to HTTP polling (_pollUntilDone)
+    └── Realtime timeout (10 min) → fallback to HTTP polling
+
+HTTP polling fallback (_pollUntilDone):
+    interval: 3 000 ms
+    max attempts: 200 (~10 min total)
+    error tolerance: up to 3 consecutive network errors silently retried
     status == 'failed' → display error, allow retry (reset())
-    timeout (300 attempts × 2s = 10 min) → timeout error
+    max attempts exceeded → timeout error
 ```
 
 ### LLM Error Handling

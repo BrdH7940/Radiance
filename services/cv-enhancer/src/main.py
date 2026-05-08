@@ -132,15 +132,16 @@ async def _process_legacy_record(body: dict, use_case) -> None:
     jd_text = body.get("jd_text")
     logger.info("Worker processing legacy Job ID: %s", job_id)
 
+    # Best-effort X-Ray annotations — failure must never prevent or duplicate execute().
     try:
-        from observability.xray import annotate_kv, with_subsegment
+        from observability.xray import annotate_kv
         annotate_kv("event_source", "sqs")
         annotate_kv("job_id", job_id)
         annotate_kv("s3_key", s3_key)
-        with with_subsegment("sqs_legacy_record"):
-            await use_case.execute(job_id=job_id, s3_key=s3_key, jd_text=jd_text)
     except Exception:
-        await use_case.execute(job_id=job_id, s3_key=s3_key, jd_text=jd_text)
+        pass
+
+    await use_case.execute(job_id=job_id, s3_key=s3_key, jd_text=jd_text)
 
 
 async def _process_gallery_record(body: dict) -> None:

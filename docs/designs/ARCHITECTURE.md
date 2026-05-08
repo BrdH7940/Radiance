@@ -126,6 +126,10 @@ def handler(event, context):
 - Không init tại startup — adapters lazy-init on first use
 - CORS preflight (OPTIONS) returns trước khi bất kỳ adapter nào được khởi tạo
 
+**Async safety:**
+- CPU-bound operations (WeasyPrint PDF render) và synchronous I/O (SQS boto3, S3 upload) đều chạy qua `asyncio.to_thread()` — không bao giờ block event loop
+- In-process background jobs (`IN_PROCESS_WORKER=1`) dùng `_run_in_process_job()` wrapper để đảm bảo exceptions được logged, không bị nuốt
+
 ### 2.4 Async Messaging Layer — Amazon SQS
 
 **Giải quyết bài toán API Gateway 29-second hard timeout:**
@@ -152,6 +156,8 @@ POST /analyses (~100ms response)
 SQS `Records` event phân biệt job type qua `body.type` field:
 - `"legacy_enhance"` → standard CV analysis
 - `"gallery_enhance"` → strategic gallery enhancement
+
+SQS `send_job()` và `send_gallery_job()` được gọi qua `asyncio.to_thread()` trong HTTP handlers — boto3 calls không block FastAPI event loop.
 
 ### 2.5 Storage Layer
 
@@ -224,13 +230,15 @@ Browser                API GW       Lambda HTTP      SQS     Lambda Worker
    │◄─────────────────────────────────────│           │             │
    │  { id: jobId, status: "queued" }     │           │   consume   │
    │                                      │           │────────────►│
-   │  (polling every 2s)                  │           │             │ S3.download(cv.pdf)
-   │  GET /analyses/{jobId}               │           │             │ parse PDF
-   │─────────────────────────────────────►│           │             │ LangGraph(Gemini)
-   │◄─────────────────────────────────────│           │             │ WeasyPrint → PDF
-   │  { status: "processing" }            │           │             │ S3.upload(enhanced.pdf)
+   │  subscribe Realtime job:<jobId>      │           │             │ S3.download(cv.pdf)
+   │  [fallback: HTTP poll / 3s,          │           │             │ parse PDF
+   │   tolerates 3 consecutive errors]    │           │             │ LangGraph(Gemini)
+   │                                      │           │             │ WeasyPrint → PDF (thread pool)
+   │                                      │           │             │ S3.upload(enhanced.pdf)
    │                                      │           │             │ DynamoDB.update(COMPLETED)
-   │  GET /analyses/{jobId}               │           │             │ Supabase.save(history)
+   │  ← broadcast: {status: completed}    │           │             │ Realtime.broadcast()
+   │                                      │           │             │ Supabase.save(history)
+   │  GET /analyses/{jobId} (once)        │           │             │
    │─────────────────────────────────────►│           │             │
    │◄─────────────────────────────────────│           │             │
    │  { status: "completed", result: {...} }           │             │
@@ -262,8 +270,9 @@ Browser (WebWorker)          API GW       Lambda HTTP      SQS     Lambda Worker
    │◄──────────────────────────────────────────            │   consume  │
    │  { id: jobId, status: "queued" }           │           │───────────►│
    │                                            │           │            │ Gemini.enhance_from_gallery()
-   │  (polling every 2s)                        │           │            │ DynamoDB.update(COMPLETED)
-   │  GET /analyses/{jobId}                     │           │            │
+   │                                            │           │            │ DynamoDB.update(COMPLETED)
+   │  ← broadcast: {status: completed}         │           │            │ Realtime.broadcast()
+   │  GET /analyses/{jobId} (once)              │           │            │
    │───────────────────────────────────────────►            │            │
    │◄──────────────────────────────────────────            │            │
    │  { status: "completed", enhanced_cv_json }             │            │
@@ -446,9 +455,9 @@ docker compose run --rm eval
 
 | Bottleneck | Current approach | Production upgrade |
 |-----------|-----------------|-------------------|
-| Rate limiting | In-memory per Lambda instance | DynamoDB / Redis distributed counter |
+| Rate limiting | DynamoDB atomic counter (shared across Lambda instances) | Redis for sub-millisecond latency at very high RPS |
 | Job state | DynamoDB on-demand | Scales automatically |
 | LLM throughput | Gemini API rate limits + Groq fallback | Multiple API keys, request queuing |
-| PDF rendering | WeasyPrint in Lambda (CPU-bound) | Dedicated PDF service / container |
+| PDF rendering | WeasyPrint offloaded to thread pool via `asyncio.to_thread()` | Dedicated PDF service / container |
 | WebWorker models | Browser cache (~113 MB) | Service Worker pre-cache strategy |
 | Supabase connections | Supabase Python SDK (connection pool) | PgBouncer or connection limiting |

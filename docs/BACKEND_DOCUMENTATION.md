@@ -134,7 +134,7 @@ services/cv-enhancer/
 │   │   ├── history.py                  # CRUD /api/v1/history
 │   │   └── dependencies/
 │   │       ├── auth.py                 # Supabase JWT verification
-│   │       └── rate_limiter.py         # In-memory sliding-window rate limiter
+│   │       └── rate_limiter.py         # DynamoDB-backed rate limiter (in-memory fallback for local dev)
 │   └── observability/
 │       ├── langsmith.py                # LangSmith tracing init
 │       └── xray.py                     # AWS X-Ray tracing init
@@ -436,7 +436,7 @@ Authorization: Bearer <supabase_access_token>
 Rate limit: 60 requests/hour
 ```
 
-Render a `CVResumeSchema` JSON object to PDF server-side via Jinja2 HTML + WeasyPrint. Upload to S3, return presigned download URL.
+Render a `CVResumeSchema` JSON object to PDF server-side via Jinja2 HTML + WeasyPrint. Upload to S3, return presigned download URL. The CPU-bound WeasyPrint render and S3 upload both run in a thread pool via `asyncio.to_thread()` to avoid blocking the FastAPI event loop.
 
 **Request:**
 ```json
@@ -893,14 +893,24 @@ The function auto-detects the algorithm from the JWT header. JWKS client is cach
 
 ## 12. Rate Limiting
 
-In-memory sliding-window rate limiter (per user, per Lambda instance).
+DynamoDB-backed sliding-window rate limiter — shared across all Lambda instances.
 
 | Limiter | Limit | Applied to |
 |---------|-------|------------|
 | `check_analysis_rate_limit` | 10 req/hour | `POST /analyses`, `POST /analyses/enhance-from-gallery` |
 | `check_editor_rate_limit` | 60 req/hour | `POST /editor/renders` |
 
-**Lambda note:** Each Lambda instance has isolated memory. For production with multiple concurrent instances, replace the in-memory log dicts with DynamoDB or Redis.
+### Implementation
+
+Rate-limit state is stored atomically in DynamoDB using `UpdateItem ADD` operations:
+
+- **Key pattern:** PK = `ANALYSIS_USER_ID` (existing partition), SK = `RATE_LIMIT#<label>#<user_id>#<window>` (e.g. `RATE_LIMIT#analysis#abc123#2024-01-15T10`)
+- **Window:** 1-hour UTC buckets (e.g. `2024-01-15T10` covers 10:00–10:59 UTC)
+- **Atomic counter:** `ADD rate_count :one` — concurrent Lambda instances cannot race past the limit
+- **TTL:** `expires_at` set to 2 hours after window start — DynamoDB auto-deletes expired items
+- **Fallback:** If DynamoDB is unavailable (network error, local dev without DynamoDB Local), an in-memory sliding-window activates automatically. The fallback is per-instance and logs a warning.
+
+Both check functions are `async` and run the DynamoDB call via `asyncio.to_thread()` to avoid blocking the event loop.
 
 ---
 
@@ -928,6 +938,8 @@ def handler(event, context):
 
 Each record is processed independently. On failure, the exception is re-raised so SQS retries according to the queue's redrive policy (Dead Letter Queue after max retries).
 
+**X-Ray annotation safety:** `_process_legacy_record` annotates the record with `event_source`, `job_id`, and `s3_key` before calling `use_case.execute()`. The annotation block is wrapped in its own `try/except` — observability failure can never prevent or duplicate the pipeline run.
+
 ### Mangum Configuration
 
 ```python
@@ -948,9 +960,9 @@ mangum_handler = Mangum(app, lifespan="on")
 
 ### AWS X-Ray
 
-`observability/xray.py` — initialised if `AWS_XRAY_DAEMON_ADDRESS` is set. FastAPI middleware is instrumented to trace all HTTP requests. SQS records are annotated with `event_source`, `job_id`, and `s3_key`.
+`observability/xray.py` — initialised if `AWS_XRAY_DAEMON_ADDRESS` is set. FastAPI middleware is instrumented to trace all HTTP requests. SQS records are annotated with `event_source`, `job_id`, and `s3_key` in a separate best-effort block that is fully isolated from the processing pipeline — annotation failure cannot cause duplicate or missing pipeline executions.
 
-Both are **best-effort**: any failure in observability init is silently caught and never prevents the app from starting.
+Both observability tools are **best-effort**: any failure in init or annotation is silently caught and never prevents the app from starting or processing jobs.
 
 ### CloudWatch Logs
 
@@ -1006,7 +1018,7 @@ pip install -r requirements.txt
 IN_PROCESS_WORKER=1 python src/main.py
 ```
 
-`IN_PROCESS_WORKER=1` skips SQS; analysis jobs run inline via `asyncio.create_task()`. Clients still receive terminal job status via Supabase Realtime and fetch the full result via `GET /api/v1/analyses/{job_id}`.
+`IN_PROCESS_WORKER=1` skips SQS; analysis jobs run inline via `asyncio.create_task(_run_in_process_job(...))`. Any exception from the background task is logged at `ERROR` level and does not silently disappear. Clients still receive terminal job status via Supabase Realtime and fetch the full result via `GET /api/v1/analyses/{job_id}`.
 
 ### Run the local SQS worker (alternative)
 

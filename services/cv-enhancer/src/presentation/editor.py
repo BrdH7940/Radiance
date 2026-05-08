@@ -3,6 +3,7 @@ FastAPI router for the workspace editor:
   - Renders: CVResumeSchema JSON → HTML → PDF (WeasyPrint) → S3 presigned URL.
 """
 
+import asyncio
 import logging
 import tempfile
 from uuid import uuid4
@@ -55,7 +56,8 @@ async def create_render(
     settings: AppSettings = get_settings()
     s3_key = f"{settings.s3_enhanced_prefix}{uuid4().hex}_workspace.pdf"
 
-    try:
+    def _render_and_upload() -> str:
+        """CPU-bound render + I/O upload — runs in a thread to avoid blocking the event loop."""
         with tempfile.TemporaryDirectory(prefix="radiance_render_") as tmp_dir:
             pdf_path = pdf_renderer.render_to_pdf(
                 cv_data=payload.cv_data,
@@ -66,7 +68,10 @@ async def create_render(
                 object_key=s3_key,
                 content_type="application/pdf",
             )
-        pdf_url = storage.generate_presigned_download_url(s3_key)
+        return storage.generate_presigned_download_url(s3_key)
+
+    try:
+        pdf_url = await asyncio.to_thread(_render_and_upload)
         logger.info("Workspace PDF rendered and uploaded: %s", s3_key)
         return RenderResponse(pdf_url=pdf_url, success=True)
     except RuntimeError as exc:
