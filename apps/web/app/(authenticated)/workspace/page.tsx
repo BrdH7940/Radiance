@@ -47,6 +47,7 @@ function WorkspacePageInner() {
     const router = useRouter()
     const searchParams = useSearchParams()
     const historyId = searchParams.get('id')
+    const view = searchParams.get('view')
 
     const {
         user,
@@ -410,11 +411,17 @@ function WorkspacePageInner() {
         (step: number) => {
             if (historyId) {
                 if (step === 1) {
-                    router.push('/dashboard/history')
+                    router.push(`/workspace?id=${historyId}&view=jd`)
                     return
                 }
                 if (step === 2) {
-                    router.push(`/dashboard/history?id=${historyId}`)
+                    setInputReviewMode(false)
+                    setPhase('dashboard')
+                    router.push('/dashboard')
+                    return
+                }
+                if (step === 3) {
+                    router.push(`/workspace?id=${historyId}`)
                     return
                 }
                 return
@@ -470,6 +477,48 @@ function WorkspacePageInner() {
     }
 
     if (!cvData) return null
+
+    if (historyId && view === 'jd') {
+        return (
+            <div className="h-screen flex flex-col overflow-hidden bg-[#FBFBF9] text-[#1C293C]">
+                <NavBar activeStep={1} onStepClick={handleStepClick} />
+
+                <div className="shrink-0 flex items-center gap-3 px-5 py-2.5 border-b-4 border-black bg-[#FBFBF9]">
+                    <button
+                        onClick={() => router.push(`/workspace?id=${historyId}`)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-none border-4 border-black bg-[#FBFBF9] text-[#1C293C] text-xs font-medium hover:bg-[#FDC800] transition-all duration-200 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[3px] hover:translate-y-[3px]"
+                    >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                        Back
+                    </button>
+
+                    <div className="h-4 w-px bg-black/20" />
+
+                    <div className="text-xs font-semibold tracking-wider uppercase text-[#4B5563]">
+                        Job Description
+                    </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto px-6 sm:px-8 py-8">
+                    <div className="max-w-4xl mx-auto">
+                        <div className="rounded-none border-4 border-black bg-[#FBFBF9] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-6">
+                            <div className="flex items-center justify-between gap-3 mb-4">
+                                <h1 className="text-xl sm:text-2xl font-black tracking-tighter text-[#1C293C]">
+                                    Job Description
+                                </h1>
+                            </div>
+
+                            <pre className="whitespace-pre-wrap break-words text-sm leading-relaxed text-[#1C293C]">
+                                {jdText?.trim()
+                                    ? jdText
+                                    : 'No job description was saved for this entry.'}
+                            </pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )
+    }
 
     return (
         <div className="h-screen flex flex-col overflow-hidden bg-[#FBFBF9] text-[#1C293C]">
