@@ -45,11 +45,54 @@ function buildProjectText(item: ProjectItem): string {
 }
 
 function extractReasoning(raw: string): string {
-    const match = raw.match(/REASONING:\s*(.+)/i)
-    if (match?.[1]) return match[1].trim()
-    // Fallback: take first non-empty sentence
-    const sentence = raw.split(/[.\n]/)[0].trim()
-    return sentence.length > 10 ? sentence : 'Relevant experience matches the job requirements.'
+    const DEFAULT = 'Relevant technical experience matches the job requirements.'
+
+    const cleaned = raw
+        .replace(/\u0000/g, '')
+        .replace(/\r\n/g, '\n')
+        .trim()
+
+    // Prefer the explicit marker if present.
+    const afterMarker = (() => {
+        const idx = cleaned.toLowerCase().indexOf('reasoning:')
+        if (idx >= 0) return cleaned.slice(idx + 'reasoning:'.length).trim()
+        return cleaned
+    })()
+
+    // Some small instruct models respond with JSON (or a JSON-like blob).
+    // Try to parse and pull a likely field.
+    const jsonCandidateMatch = afterMarker.match(/\{[\s\S]*\}/)
+    if (jsonCandidateMatch?.[0]) {
+        try {
+            const obj = JSON.parse(jsonCandidateMatch[0]) as Record<string, unknown>
+            const picked =
+                (typeof obj.reasoning === 'string' && obj.reasoning) ||
+                (typeof obj.reason === 'string' && obj.reason) ||
+                (typeof obj.explanation === 'string' && obj.explanation) ||
+                ''
+            const s = picked.trim()
+            if (s.length >= 10) return s
+        } catch {
+            // Ignore parse failures; we'll sanitize below.
+        }
+    }
+
+    // Strip wrapping quotes/backticks and obvious artifacts.
+    const unwrapped = afterMarker
+        .replace(/^[`"'“”‘’]+/, '')
+        .replace(/[`"'“”‘’]+$/, '')
+        .replace(/^\s*[-–—]\s*/, '')
+        .trim()
+
+    if (unwrapped.length >= 10) return unwrapped
+
+    // Fallback: take first non-empty sentence-like chunk.
+    const sentence = cleaned
+        .split(/[\n.?!]/)
+        .map((s) => s.trim())
+        .find((s) => s.length >= 10)
+
+    return sentence ?? DEFAULT
 }
 
 // ─── Main handler ─────────────────────────────────────────────────────────────

@@ -14,6 +14,7 @@ LangGraph pipeline with a different underlying `BaseChatModel`.
 
 import json
 import logging
+import re
 from typing import List, TypedDict
 
 from langchain_core.language_models import BaseChatModel
@@ -449,6 +450,24 @@ async def run_rank_projects_for_jd(
 ) -> List[ClientAIResult]:
     """Rank projects against a JD — server-side fallback for the WebWorker."""
 
+    def _sanitize_reasoning(text: str) -> str:
+        default = "Relevant technical experience matches the job requirements."
+        s = (text or "").replace("\x00", "").strip()
+        if not s:
+            return default
+
+        # Remove the required prefix if the model included it.
+        m = re.search(r"reasoning:\s*(.*)$", s, flags=re.IGNORECASE | re.DOTALL)
+        if m:
+            s = (m.group(1) or "").strip()
+
+        # Strip wrapping quotes/backticks and common artifacts.
+        s = s.strip().strip('`"\'“”‘’').strip()
+
+        if len(s) >= 10:
+            return s
+        return default
+
     class _RankerOutput(BaseModel):
         results: List[ClientAIResult]
 
@@ -476,6 +495,15 @@ async def run_rank_projects_for_jd(
     )
 
     ranked = sorted(output.results, key=lambda r: r.fit_score, reverse=True)[:5]
+    # Normalize reasoning so the UI never sees "REASONING:" artifacts or trivial outputs.
+    ranked = [
+        ClientAIResult(
+            project_id=r.project_id,
+            fit_score=r.fit_score,
+            client_reasoning=_sanitize_reasoning(r.client_reasoning),
+        )
+        for r in ranked
+    ]
     logger.info("Project ranker: returned %d results.", len(ranked))
     return ranked
 

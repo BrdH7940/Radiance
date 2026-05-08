@@ -20,6 +20,39 @@ export type ProgressStep = 1 | 2
 
 export type OnProgressCallback = (step: ProgressStep) => void
 
+function normalizeClientReasoning(raw: string | null | undefined): string {
+    const DEFAULT = 'Relevant technical experience matches the job requirements.'
+    const s = (raw ?? '').replace(/\u0000/g, '').trim()
+    if (!s) return DEFAULT
+
+    // Remove leading marker if present.
+    const lowered = s.toLowerCase()
+    const markerIdx = lowered.indexOf('reasoning:')
+    const afterMarker = markerIdx >= 0 ? s.slice(markerIdx + 'reasoning:'.length).trim() : s
+
+    const unwrapped = afterMarker
+        .replace(/^[`"'“”‘’]+/, '')
+        .replace(/[`"'“”‘’]+$/, '')
+        .trim()
+
+    if (unwrapped.length >= 10) return unwrapped
+
+    // As a last resort, if the string still contains useful text, keep it; otherwise default.
+    const fallback = s
+        .replace(/^[`"'“”‘’]+/, '')
+        .replace(/[`"'“”‘’]+$/, '')
+        .trim()
+
+    return fallback.length >= 10 ? fallback : DEFAULT
+}
+
+function normalizeClientResults(results: ClientAIResult[]): ClientAIResult[] {
+    return results.map((r) => ({
+        ...r,
+        client_reasoning: normalizeClientReasoning(r.client_reasoning),
+    }))
+}
+
 /**
  * Run client-side AI analysis on the user's project gallery against a JD.
  *
@@ -41,7 +74,7 @@ export async function analyzeProjectsWithClientAI(
             worker?.terminate()
             try {
                 const results = await callFallbackClientAI({ jd_text: jd, project_gallery: gallery })
-                resolve(results)
+                resolve(normalizeClientResults(results))
             } catch (err) {
                 reject(err)
             }
@@ -72,7 +105,7 @@ export async function analyzeProjectsWithClientAI(
 
                 case 'RESULT':
                     worker?.terminate()
-                    resolve(msg.data)
+                    resolve(normalizeClientResults(msg.data))
                     break
 
                 case 'FALLBACK_REQUIRED':
